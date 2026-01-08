@@ -43,7 +43,7 @@ src/main/
 
 ## Yêu cầu
 
-- Java 11+
+- Java 21+
 - PostgreSQL 13+
 - Maven 3.6+
 
