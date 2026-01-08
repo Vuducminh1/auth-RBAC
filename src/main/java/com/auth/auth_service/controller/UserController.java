@@ -1,0 +1,86 @@
+package com.auth.auth_service.controller;
+
+import com.auth.auth_service.dto.ApiResponse;
+import com.auth.auth_service.dto.UserDto;
+import com.auth.auth_service.entity.User;
+import com.auth.auth_service.repository.UserRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.stream.Collectors;
+
+@RestController
+@RequestMapping("/api/users")
+@RequiredArgsConstructor
+public class UserController {
+    
+    private final UserRepository userRepository;
+    
+    @GetMapping
+    @PreAuthorize("hasAnyRole('HR', 'Manager', 'SecurityAdmin')")
+    public ResponseEntity<ApiResponse<List<UserDto>>> getAllUsers() {
+        List<UserDto> users = userRepository.findAll().stream()
+                .map(this::mapToDto)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(ApiResponse.success(users));
+    }
+    
+    @GetMapping("/{userId}")
+    @PreAuthorize("hasAnyRole('HR', 'Manager', 'SecurityAdmin')")
+    public ResponseEntity<ApiResponse<UserDto>> getUserById(@PathVariable String userId) {
+        User user = userRepository.findByUserId(userId)
+                .orElseThrow(() -> new RuntimeException("User not found: " + userId));
+        return ResponseEntity.ok(ApiResponse.success(mapToDto(user)));
+    }
+    
+    @GetMapping("/department/{department}")
+    @PreAuthorize("hasAnyRole('HR', 'Manager')")
+    public ResponseEntity<ApiResponse<List<UserDto>>> getUsersByDepartment(@PathVariable String department) {
+        List<UserDto> users = userRepository.findByDepartment(department).stream()
+                .map(this::mapToDto)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(ApiResponse.success(users));
+    }
+    
+    @GetMapping("/branch/{branch}")
+    @PreAuthorize("hasAnyRole('HR', 'Manager')")
+    public ResponseEntity<ApiResponse<List<UserDto>>> getUsersByBranch(@PathVariable String branch) {
+        List<UserDto> users = userRepository.findByBranch(branch).stream()
+                .map(this::mapToDto)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(ApiResponse.success(users));
+    }
+    
+    @GetMapping("/role/{roleName}")
+    @PreAuthorize("hasAnyRole('HR', 'Manager', 'SecurityAdmin')")
+    public ResponseEntity<ApiResponse<List<UserDto>>> getUsersByRole(@PathVariable String roleName) {
+        List<UserDto> users = userRepository.findByRoleName(roleName).stream()
+                .map(this::mapToDto)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(ApiResponse.success(users));
+    }
+    
+    private UserDto mapToDto(User user) {
+        return UserDto.builder()
+                .userId(user.getUserId())
+                .username(user.getUsername())
+                .email(user.getEmail())
+                .role(user.getRole().getName())
+                .department(user.getDepartment())
+                .branch(user.getBranch())
+                .position(user.getPosition())
+                .hasLicense(user.isHasLicense())
+                .seniority(user.getSeniority())
+                .employmentType(user.getEmploymentType())
+                .enabled(user.isEnabled())
+                .assignedPatients(user.getAssignedPatients())
+                .permissions(user.getRole().getPermissions().stream()
+                        .map(p -> p.getPermissionKey())
+                        .collect(Collectors.toSet()))
+                .build();
+    }
+}
+
