@@ -130,8 +130,13 @@ public class PatientController {
     
     @PostMapping
     public ResponseEntity<ApiResponse<PatientProfileDto>> createPatient(
-            @RequestBody PatientProfileDto request,
+            @RequestBody(required = false) PatientProfileDto request,
             @AuthenticationPrincipal UserPrincipal user) {
+        
+        // Auto-create request with defaults if null
+        if (request == null) {
+            request = new PatientProfileDto();
+        }
         
         AuthorizationResponse authResponse = checkAuthorization(user, "PatientProfile", "create", user.getBranch());
         if (!authResponse.isAllowed()) {
@@ -144,6 +149,17 @@ public class PatientController {
         request.setBranch(user.getBranch());
         request.setCreatedAt(LocalDateTime.now());
         request.setUpdatedAt(LocalDateTime.now());
+        
+        // Set defaults for required fields
+        if (request.getFullName() == null || request.getFullName().isEmpty()) {
+            request.setFullName("New Patient");
+        }
+        if (request.getDateOfBirth() == null) {
+            request.setDateOfBirth(LocalDate.of(1990, 1, 1));
+        }
+        if (request.getGender() == null) request.setGender("Not specified");
+        if (request.getPhone() == null) request.setPhone("0900000000");
+        if (request.getDepartment() == null) request.setDepartment(user.getDepartment() != null ? user.getDepartment() : "General");
         
         mockPatients.put(patientId, request);
         

@@ -148,8 +148,18 @@ public class LabController {
     
     @PostMapping("/orders")
     public ResponseEntity<ApiResponse<LabOrderDto>> createLabOrder(
-            @RequestBody LabOrderDto request,
+            @RequestBody(required = false) LabOrderDto request,
             @AuthenticationPrincipal UserPrincipal user) {
+        
+        // Auto-create request with defaults if null
+        if (request == null) {
+            request = new LabOrderDto();
+        }
+        
+        // Set default patientId if not provided
+        if (request.getPatientId() == null || request.getPatientId().isEmpty()) {
+            request.setPatientId("PAT001");
+        }
         
         AuthorizationResponse authResponse = checkAuthorization(user, "LabOrder", "create", 
                 user.getBranch(), user.getDepartment());
@@ -165,6 +175,13 @@ public class LabController {
         request.setBranch(user.getBranch());
         request.setDepartment(user.getDepartment());
         request.setOrderedAt(LocalDateTime.now());
+        
+        // Set defaults for optional fields
+        if (request.getTests() == null || request.getTests().isEmpty()) {
+            request.setTests(List.of("Complete Blood Count", "Basic Metabolic Panel"));
+        }
+        if (request.getPriority() == null) request.setPriority("Routine");
+        if (request.getClinicalNotes() == null) request.setClinicalNotes("Routine laboratory tests");
         
         mockLabOrders.put(orderId, request);
         

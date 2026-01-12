@@ -190,8 +190,18 @@ public class BillingController {
     
     @PostMapping("/records")
     public ResponseEntity<ApiResponse<BillingRecordDto>> createBillingRecord(
-            @RequestBody BillingRecordDto request,
+            @RequestBody(required = false) BillingRecordDto request,
             @AuthenticationPrincipal UserPrincipal user) {
+        
+        // Auto-create request with defaults if null
+        if (request == null) {
+            request = new BillingRecordDto();
+        }
+        
+        // Set default patientId if not provided
+        if (request.getPatientId() == null || request.getPatientId().isEmpty()) {
+            request.setPatientId("PAT001");
+        }
         
         AuthorizationResponse authResponse = checkAuthorization(user, "BillingRecord", "create", user.getBranch());
         if (!authResponse.isAllowed()) {
@@ -206,6 +216,34 @@ public class BillingController {
         request.setBranch(user.getBranch());
         request.setCreatedAt(LocalDateTime.now());
         request.setUpdatedAt(LocalDateTime.now());
+        
+        // Set default items if not provided
+        if (request.getItems() == null || request.getItems().isEmpty()) {
+            request.setItems(List.of(
+                BillingRecordDto.BillingItem.builder()
+                    .itemCode("CONS001")
+                    .description("Consultation fee")
+                    .quantity(1)
+                    .unitPrice(BigDecimal.valueOf(200000))
+                    .amount(BigDecimal.valueOf(200000))
+                    .category("Consultation")
+                    .build()
+            ));
+        }
+        
+        // Calculate totals if not provided
+        if (request.getSubtotal() == null) {
+            BigDecimal subtotal = request.getItems().stream()
+                .map(BillingRecordDto.BillingItem::getAmount)
+                .filter(Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+            request.setSubtotal(subtotal);
+        }
+        if (request.getDiscount() == null) request.setDiscount(BigDecimal.ZERO);
+        if (request.getTax() == null) request.setTax(request.getSubtotal().multiply(BigDecimal.valueOf(0.1)));
+        if (request.getTotal() == null) {
+            request.setTotal(request.getSubtotal().subtract(request.getDiscount()).add(request.getTax()));
+        }
         
         mockBillings.put(billingId, request);
         
@@ -266,8 +304,23 @@ public class BillingController {
     
     @PostMapping("/invoices")
     public ResponseEntity<ApiResponse<InvoiceDto>> createInvoice(
-            @RequestBody InvoiceDto request,
+            @RequestBody(required = false) InvoiceDto request,
             @AuthenticationPrincipal UserPrincipal user) {
+        
+        // Auto-create request with defaults if null
+        if (request == null) {
+            request = new InvoiceDto();
+        }
+        
+        // Set default patientId if not provided
+        if (request.getPatientId() == null || request.getPatientId().isEmpty()) {
+            request.setPatientId("PAT001");
+        }
+        
+        // Set default billingId if not provided
+        if (request.getBillingId() == null || request.getBillingId().isEmpty()) {
+            request.setBillingId("BL001");
+        }
         
         AuthorizationResponse authResponse = checkAuthorization(user, "Invoice", "create", user.getBranch());
         if (!authResponse.isAllowed()) {
@@ -281,6 +334,12 @@ public class BillingController {
         request.setStatus("Pending");
         request.setBranch(user.getBranch());
         request.setCreatedAt(LocalDateTime.now());
+        
+        // Set defaults for optional fields
+        if (request.getAmount() == null) request.setAmount(BigDecimal.valueOf(200000));
+        if (request.getPaidAmount() == null) request.setPaidAmount(BigDecimal.ZERO);
+        if (request.getBalance() == null) request.setBalance(request.getAmount().subtract(request.getPaidAmount()));
+        if (request.getDueDate() == null) request.setDueDate(LocalDate.now().plusDays(30));
         
         mockInvoices.put(invoiceId, request);
         
@@ -348,8 +407,23 @@ public class BillingController {
     
     @PostMapping("/claims")
     public ResponseEntity<ApiResponse<InsuranceClaimDto>> createClaim(
-            @RequestBody InsuranceClaimDto request,
+            @RequestBody(required = false) InsuranceClaimDto request,
             @AuthenticationPrincipal UserPrincipal user) {
+        
+        // Auto-create request with defaults if null
+        if (request == null) {
+            request = new InsuranceClaimDto();
+        }
+        
+        // Set default patientId if not provided
+        if (request.getPatientId() == null || request.getPatientId().isEmpty()) {
+            request.setPatientId("PAT001");
+        }
+        
+        // Set default invoiceId if not provided
+        if (request.getInvoiceId() == null || request.getInvoiceId().isEmpty()) {
+            request.setInvoiceId("INV001");
+        }
         
         AuthorizationResponse authResponse = checkAuthorization(user, "InsuranceClaim", "create", user.getBranch());
         if (!authResponse.isAllowed()) {
@@ -363,6 +437,11 @@ public class BillingController {
         request.setStatus("Draft");
         request.setBranch(user.getBranch());
         request.setCreatedAt(LocalDateTime.now());
+        
+        // Set defaults for optional fields
+        if (request.getInsuranceProvider() == null) request.setInsuranceProvider("Sample Insurance Co.");
+        if (request.getPolicyNumber() == null) request.setPolicyNumber("POL-" + System.currentTimeMillis());
+        if (request.getClaimAmount() == null) request.setClaimAmount(BigDecimal.valueOf(100000));
         
         mockClaims.put(claimId, request);
         

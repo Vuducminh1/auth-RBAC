@@ -168,8 +168,18 @@ public class ImagingController {
     
     @PostMapping("/orders")
     public ResponseEntity<ApiResponse<ImagingOrderDto>> createImagingOrder(
-            @RequestBody ImagingOrderDto request,
+            @RequestBody(required = false) ImagingOrderDto request,
             @AuthenticationPrincipal UserPrincipal user) {
+        
+        // Auto-create request with defaults if null
+        if (request == null) {
+            request = new ImagingOrderDto();
+        }
+        
+        // Set default patientId if not provided
+        if (request.getPatientId() == null || request.getPatientId().isEmpty()) {
+            request.setPatientId("PAT001");
+        }
         
         AuthorizationResponse authResponse = checkAuthorization(user, "ImagingOrder", "create", 
                 user.getBranch(), user.getDepartment());
@@ -185,6 +195,12 @@ public class ImagingController {
         request.setBranch(user.getBranch());
         request.setDepartment(user.getDepartment());
         request.setOrderedAt(LocalDateTime.now());
+        
+        // Set defaults for optional fields
+        if (request.getModality() == null) request.setModality("X-Ray");
+        if (request.getBodyPart() == null) request.setBodyPart("Chest");
+        if (request.getPriority() == null) request.setPriority("Routine");
+        if (request.getClinicalIndication() == null) request.setClinicalIndication("Routine imaging study");
         
         mockImagingOrders.put(orderId, request);
         

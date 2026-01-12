@@ -250,8 +250,18 @@ public class StaffController {
     
     @PostMapping("/profiles")
     public ResponseEntity<ApiResponse<StaffProfileDto>> createStaffProfile(
-            @RequestBody StaffProfileDto request,
+            @RequestBody(required = false) StaffProfileDto request,
             @AuthenticationPrincipal UserPrincipal user) {
+        
+        // Auto-create request with defaults if null
+        if (request == null) {
+            request = new StaffProfileDto();
+        }
+        
+        // Set default department if not provided
+        if (request.getDepartment() == null || request.getDepartment().isEmpty()) {
+            request.setDepartment(user.getDepartment() != null ? user.getDepartment() : "General");
+        }
         
         AuthorizationResponse authResponse = checkAuthorization(user, "StaffProfile", "create", 
                 user.getBranch(), request.getDepartment());
@@ -266,6 +276,19 @@ public class StaffController {
         request.setBranch(user.getBranch());
         request.setCreatedAt(LocalDateTime.now());
         request.setUpdatedAt(LocalDateTime.now());
+        
+        // Set defaults for required fields
+        if (request.getFullName() == null || request.getFullName().isEmpty()) {
+            request.setFullName("New Staff Member");
+        }
+        if (request.getEmployeeNumber() == null || request.getEmployeeNumber().isEmpty()) {
+            request.setEmployeeNumber("EMP-" + System.currentTimeMillis());
+        }
+        if (request.getPosition() == null) request.setPosition("Staff");
+        if (request.getRole() == null) request.setRole("General");
+        if (request.getEmploymentType() == null) request.setEmploymentType("FullTime");
+        if (request.getSeniority() == null) request.setSeniority("Junior");
+        if (request.getHireDate() == null) request.setHireDate(LocalDate.now());
         
         mockStaff.put(staffId, request);
         
@@ -329,8 +352,23 @@ public class StaffController {
     
     @PostMapping("/schedules")
     public ResponseEntity<ApiResponse<WorkScheduleDto>> createSchedule(
-            @RequestBody WorkScheduleDto request,
+            @RequestBody(required = false) WorkScheduleDto request,
             @AuthenticationPrincipal UserPrincipal user) {
+        
+        // Auto-create request with defaults if null
+        if (request == null) {
+            request = new WorkScheduleDto();
+        }
+        
+        // Set default staffId if not provided
+        if (request.getStaffId() == null || request.getStaffId().isEmpty()) {
+            request.setStaffId("STF001");
+        }
+        
+        // Set default department if not provided
+        if (request.getDepartment() == null || request.getDepartment().isEmpty()) {
+            request.setDepartment(user.getDepartment() != null ? user.getDepartment() : "General");
+        }
         
         AuthorizationResponse authResponse = checkAuthorization(user, "WorkSchedule", "create", 
                 user.getBranch(), request.getDepartment());
@@ -346,6 +384,12 @@ public class StaffController {
         request.setBranch(user.getBranch());
         request.setCreatedAt(LocalDateTime.now());
         request.setUpdatedAt(LocalDateTime.now());
+        
+        // Set defaults for required fields
+        if (request.getDate() == null) request.setDate(LocalDate.now().plusDays(1));
+        if (request.getStartTime() == null) request.setStartTime(LocalTime.of(8, 0));
+        if (request.getEndTime() == null) request.setEndTime(LocalTime.of(17, 0));
+        if (request.getShiftType() == null) request.setShiftType("Morning");
         
         mockSchedules.put(scheduleId, request);
         
@@ -409,8 +453,23 @@ public class StaffController {
     
     @PostMapping("/training")
     public ResponseEntity<ApiResponse<TrainingRecordDto>> createTrainingRecord(
-            @RequestBody TrainingRecordDto request,
+            @RequestBody(required = false) TrainingRecordDto request,
             @AuthenticationPrincipal UserPrincipal user) {
+        
+        // Auto-create request with defaults if null
+        if (request == null) {
+            request = new TrainingRecordDto();
+        }
+        
+        // Set default staffId if not provided
+        if (request.getStaffId() == null || request.getStaffId().isEmpty()) {
+            request.setStaffId("STF001");
+        }
+        
+        // Set default department if not provided
+        if (request.getDepartment() == null || request.getDepartment().isEmpty()) {
+            request.setDepartment(user.getDepartment() != null ? user.getDepartment() : "General");
+        }
         
         AuthorizationResponse authResponse = checkAuthorization(user, "TrainingRecord", "create", 
                 user.getBranch(), request.getDepartment());
@@ -425,6 +484,13 @@ public class StaffController {
         request.setStatus("Scheduled");
         request.setBranch(user.getBranch());
         request.setCreatedAt(LocalDateTime.now());
+        
+        // Set defaults for required fields
+        if (request.getTrainingName() == null || request.getTrainingName().isEmpty()) {
+            request.setTrainingName("New Training Course");
+        }
+        if (request.getTrainingType() == null) request.setTrainingType("General");
+        if (request.getProvider() == null) request.setProvider("Internal");
         
         mockTraining.put(trainingId, request);
         

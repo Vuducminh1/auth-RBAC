@@ -159,8 +159,13 @@ public class IncidentController {
     
     @PostMapping
     public ResponseEntity<ApiResponse<IncidentCaseDto>> createIncident(
-            @RequestBody IncidentCaseDto request,
+            @RequestBody(required = false) IncidentCaseDto request,
             @AuthenticationPrincipal UserPrincipal user) {
+        
+        // Auto-create request with defaults if null
+        if (request == null) {
+            request = new IncidentCaseDto();
+        }
         
         AuthorizationResponse authResponse = checkAuthorization(user, "IncidentCase", "create");
         if (!authResponse.isAllowed()) {
@@ -175,6 +180,23 @@ public class IncidentController {
         request.setReportedAt(LocalDateTime.now());
         request.setCreatedAt(LocalDateTime.now());
         request.setUpdatedAt(LocalDateTime.now());
+        
+        // Set defaults for required fields
+        if (request.getTitle() == null || request.getTitle().isEmpty()) {
+            request.setTitle("New Security Incident");
+        }
+        if (request.getDescription() == null || request.getDescription().isEmpty()) {
+            request.setDescription("Incident reported by " + user.getUserId());
+        }
+        if (request.getSeverity() == null || request.getSeverity().isEmpty()) {
+            request.setSeverity("Medium");
+        }
+        if (request.getCategory() == null || request.getCategory().isEmpty()) {
+            request.setCategory("Security");
+        }
+        if (request.getIncidentDate() == null) {
+            request.setIncidentDate(LocalDateTime.now());
+        }
         
         mockIncidents.put(caseId, request);
         

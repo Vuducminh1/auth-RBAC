@@ -26,7 +26,7 @@ import java.util.*;
 @RequestMapping("/api/mock/clinical")
 @RequiredArgsConstructor
 @Slf4j
-public class ClinicalController {
+public class    ClinicalController {
     
     private final AuthorizationService authorizationService;
     
@@ -141,8 +141,18 @@ public class ClinicalController {
     
     @PostMapping("/notes")
     public ResponseEntity<ApiResponse<ClinicalNoteDto>> createNote(
-            @RequestBody ClinicalNoteDto request,
+            @RequestBody(required = false) ClinicalNoteDto request,
             @AuthenticationPrincipal UserPrincipal user) {
+        
+        // Auto-create request with defaults if null
+        if (request == null) {
+            request = new ClinicalNoteDto();
+        }
+        
+        // Set default patientId if not provided
+        if (request.getPatientId() == null || request.getPatientId().isEmpty()) {
+            request.setPatientId("PAT001");
+        }
         
         AuthorizationResponse authResponse = checkAuthorization(user, "ClinicalNote", "create", 
                 user.getBranch(), user.getDepartment());
@@ -158,6 +168,10 @@ public class ClinicalController {
         request.setBranch(user.getBranch());
         request.setDepartment(user.getDepartment());
         request.setCreatedAt(LocalDateTime.now());
+        
+        // Set defaults for optional fields
+        if (request.getNoteType() == null) request.setNoteType("Progress");
+        if (request.getContent() == null) request.setContent("Clinical note recorded");
         
         mockNotes.put(noteId, request);
         
@@ -210,8 +224,18 @@ public class ClinicalController {
     
     @PostMapping("/vitals")
     public ResponseEntity<ApiResponse<VitalSignsDto>> createVital(
-            @RequestBody VitalSignsDto request,
+            @RequestBody(required = false) VitalSignsDto request,
             @AuthenticationPrincipal UserPrincipal user) {
+        
+        // Auto-create request with defaults if null
+        if (request == null) {
+            request = new VitalSignsDto();
+        }
+        
+        // Set default patientId if not provided
+        if (request.getPatientId() == null || request.getPatientId().isEmpty()) {
+            request.setPatientId("PAT001");
+        }
         
         AuthorizationResponse authResponse = checkAuthorization(user, "VitalSigns", "create", 
                 user.getBranch(), user.getDepartment());
@@ -226,6 +250,14 @@ public class ClinicalController {
         request.setBranch(user.getBranch());
         request.setDepartment(user.getDepartment());
         request.setRecordedAt(LocalDateTime.now());
+        
+        // Set defaults for vital signs if not provided
+        if (request.getTemperature() == null) request.setTemperature(36.5);
+        if (request.getHeartRate() == null) request.setHeartRate(72);
+        if (request.getBloodPressureSystolic() == null) request.setBloodPressureSystolic(120);
+        if (request.getBloodPressureDiastolic() == null) request.setBloodPressureDiastolic(80);
+        if (request.getRespiratoryRate() == null) request.setRespiratoryRate(16);
+        if (request.getOxygenSaturation() == null) request.setOxygenSaturation(98.0);
         
         mockVitals.put(vitalId, request);
         
