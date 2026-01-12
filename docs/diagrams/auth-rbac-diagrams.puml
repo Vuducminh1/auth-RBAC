@@ -1,0 +1,1496 @@
+@startuml authentication-flow
+!theme cerulean
+title Luồng Xác thực (Authentication Flow)
+
+actor "User" as user
+participant "AuthController" as auth
+participant "AuthService" as authService
+participant "UserDetailsService" as userDetails
+participant "JwtTokenProvider" as jwt
+database "PostgreSQL" as db
+
+== Đăng nhập ==
+user -> auth : POST /api/auth/login\n{username, password}
+auth -> authService : login(loginRequest)
+authService -> userDetails : loadUserByUsername(username)
+userDetails -> db : findByUsername()
+db --> userDetails : User entity
+userDetails --> authService : UserPrincipal
+
+alt Mật khẩu hợp lệ
+    authService -> authService : authenticate()
+    authService -> jwt : generateToken(userPrincipal)
+    jwt --> authService : JWT Token
+    authService --> auth : LoginResponse
+    auth --> user : 200 OK\n{accessToken, user info}
+else Mật khẩu không hợp lệ
+    authService --> auth : AuthenticationException
+    auth --> user : 401 Unauthorized
+end
+
+== Truy cập API với Token ==
+user -> auth : GET /api/auth/me\nAuthorization: Bearer <token>
+auth -> jwt : validateToken(token)
+jwt --> auth : true/false
+
+alt Token hợp lệ
+    auth -> jwt : getUserIdFromToken(token)
+    jwt --> auth : userId
+    auth -> userDetails : loadUserById(userId)
+    userDetails -> db : findById()
+    db --> userDetails : User
+    userDetails --> auth : UserPrincipal
+    auth --> user : 200 OK\n{user info}
+else Token không hợp lệ
+    auth --> user : 401 Unauthorized
+end
+
+@enduml
+
+@startuml authorization-flow
+!theme cerulean
+title Luồng Phân quyền RBAC + ABAC (Authorization Flow)
+
+actor "User" as user
+participant "MockAPI\nController" as controller
+participant "Authorization\nService" as authz
+participant "AuditLog\nRepository" as audit
+database "PostgreSQL" as db
+
+user -> controller : API Request\n+ JWT Token
+controller -> controller : Extract UserPrincipal\nfrom SecurityContext
+
+controller -> authz : authorize(AuthorizationRequest)
+
+note right of authz
+  AuthorizationRequest:
+  - resourceType
+  - action
+  - resourceBranch
+  - resourceDepartment
+  - patientId
+  - createdBy
+  - environment
+end note
+
+== RBAC Check ==
+authz -> authz : checkRbacPermission()\nrole → resource → action
+
+== Deny Rules Check ==
+authz -> authz : checkDenyRules()
+note right
+  - RECEPTIONIST_NO_CLINICAL_ACCESS
+  - CASHIER_NO_CLINICAL_ACCESS
+  - HR_NO_PATIENT_OR_FINANCE_ACCESS
+  - ITADMIN_NO_PATIENT_DATA
+  - NO_DELETE_PATIENT_DATA
+  - BRANCH_MISMATCH
+  - SOD_CREATOR_CANNOT_APPROVE
+  - EXPORT_REQUIRES_APPROVAL
+end note
+
+== ABAC Check ==
+authz -> authz : checkAbacConditions()
+note right
+  - checkPatientAssigned()
+  - checkSameBranch()
+  - checkSameDepartment()
+end note
+
+== Risk Score ==
+authz -> authz : calculateRiskScore()
+note right
+  - Off-hours: +2
+  - Export action: +3
+  - High sensitivity: +2
+  - High-risk resource: +3
+  - High-risk action: +2
+end note
+
+== Add Obligations ==
+authz -> authz : addObligations()
+note right
+  - step_up_mfa
+  - mask_fields
+  - log_high_risk
+  - require_approval_ref
+  - rate_limit
+end note
+
+== Audit Logging ==
+authz -> audit : save(AuditLog)
+audit -> db : INSERT audit_logs
+
+authz --> controller : AuthorizationResponse
+
+alt allowed = true
+    controller -> controller : Process Request
+    controller --> user : 200 OK\n{data}
+else allowed = false
+    controller --> user : 403 Forbidden\n{denyReasons}
+end
+
+@enduml
+
+@startuml sequence-medical-record-access
+!theme cerulean
+title Sequence Diagram: Bác sĩ đọc Hồ sơ Bệnh án
+
+actor "Doctor\n(U0000)" as doctor
+participant "JwtFilter" as filter
+participant "MedicalRecord\nController" as controller
+participant "Authorization\nService" as authz
+participant "AuditLog\nRepository" as audit
+
+doctor -> filter : GET /api/mock/medical-records/MR001\nAuthorization: Bearer <token>
+
+filter -> filter : Validate JWT
+filter -> filter : Set SecurityContext\nwith UserPrincipal
+
+filter -> controller : Forward Request
+
+controller -> controller : @AuthenticationPrincipal\nUserPrincipal user
+
+controller -> authz : authorize()
+note right
+  resourceType: "MedicalRecord"
+  action: "read"
+  resourceBranch: "BRANCH_HCM"
+  patientId: "PAT001"
+end note
+
+authz -> authz : RBAC Check\nDoctor → MedicalRecord → read ✓
+
+authz -> authz : Deny Rules Check\n(No violations) ✓
+
+authz -> authz : ABAC Check
+note right
+  Is PAT001 in doctor's
+  assigned patients?
+  P00001 ∈ {P00001, P00002...} ✓
+end note
+
+authz -> authz : Calculate Risk Score\n= 3 (high-risk resource)
+
+authz -> audit : Log Decision
+note right
+  userId: U0000
+  resourceType: MedicalRecord
+  action: read
+  allowed: true
+  policyId: ALLOW_Doctor_MedicalRecord_read
+  riskScore: 3
+end note
+
+authz --> controller : AuthorizationResponse\n{allowed: true}
+
+controller -> controller : Fetch MedicalRecord\nfrom Mock Data
+
+controller --> doctor : 200 OK\n{medicalRecord}
+
+@enduml
+
+@startuml sequence-prescription-approve-sod
+!theme cerulean
+title Sequence Diagram: Separation of Duties - Approve Prescription
+
+actor "Doctor A\n(Creator)" as docA
+actor "Doctor B\n(Approver)" as docB
+participant "Prescription\nController" as controller
+participant "Authorization\nService" as authz
+
+== Doctor A tạo đơn thuốc ==
+docA -> controller : POST /api/mock/prescriptions\n{patientId, medications...}
+controller -> authz : authorize(Prescription, create)
+authz --> controller : {allowed: true}
+controller -> controller : Create RX001\ncreatedBy: DOC_A
+controller --> docA : 201 Created\n{prescriptionId: RX001}
+
+== Doctor A cố approve đơn thuốc của mình ==
+docA -> controller : POST /api/mock/prescriptions/RX001/approve
+
+controller -> authz : authorize()
+note right
+  resourceType: "Prescription"
+  action: "approve"
+  createdBy: "DOC_A"  ← same as current user
+end note
+
+authz -> authz : RBAC Check ✓
+authz -> authz : **SoD Check**
+note right #pink
+  **SOD_CREATOR_CANNOT_APPROVE**
+  createdBy == currentUser
+  → DENIED
+end note
+
+authz --> controller : {allowed: false,\ndenyReasons: ["SOD_CREATOR_CANNOT_APPROVE"]}
+
+controller --> docA : 403 Forbidden\n"Creator cannot approve own prescription"
+
+== Doctor B approve đơn thuốc ==
+docB -> controller : POST /api/mock/prescriptions/RX001/approve
+
+controller -> authz : authorize()
+note right
+  resourceType: "Prescription"
+  action: "approve"
+  createdBy: "DOC_A"  ← different from DOC_B
+end note
+
+authz -> authz : RBAC Check ✓
+authz -> authz : SoD Check ✓
+authz -> authz : ABAC Check ✓
+
+authz --> controller : {allowed: true}
+
+controller -> controller : Update prescription\nstatus: "Approved"\napprovedBy: DOC_B
+
+controller --> docB : 200 OK\n{prescription: approved}
+
+@enduml
+
+@startuml class-diagram
+!theme cerulean
+title Class Diagram: Core Entities
+
+package "Entity" {
+    class User {
+        -Long id
+        -String userId
+        -String username
+        -String password
+        -Role role
+        -String department
+        -String branch
+        -String position
+        -boolean hasLicense
+        -String seniority
+        -String employmentType
+        -Set<String> assignedPatients
+        -Set<Permission> additionalPermissions
+        -boolean enabled
+    }
+    
+    class Role {
+        -Long id
+        -String name
+        -String description
+        -Set<Permission> permissions
+    }
+    
+    class Permission {
+        -Long id
+        -String resourceType
+        -String action
+        -String scope
+        -String description
+        -String permissionKey
+    }
+    
+    class AuditLog {
+        -Long id
+        -String userId
+        -String resourceType
+        -String resourceId
+        -String action
+        -boolean allowed
+        -String policyId
+        -String denyReasons
+        -Integer riskScore
+        -LocalDateTime timestamp
+    }
+}
+
+package "Security" {
+    class UserPrincipal {
+        -Long id
+        -String userId
+        -String username
+        -String role
+        -String department
+        -String branch
+        -Set<String> assignedPatients
+        -Collection<GrantedAuthority> authorities
+        +create(User): UserPrincipal
+        +getPermissionKeys(): Set<String>
+    }
+    
+    class JwtTokenProvider {
+        +generateToken(UserPrincipal): String
+        +validateToken(String): boolean
+        +getUserIdFromToken(String): Long
+    }
+    
+    class JwtAuthenticationFilter {
+        +doFilterInternal()
+    }
+}
+
+package "DTO" {
+    class AuthorizationRequest {
+        -String resourceType
+        -String action
+        -String resourceId
+        -String resourceBranch
+        -String resourceDepartment
+        -String patientId
+        -String resourceSensitivity
+        -String createdBy
+        -Map<String,Object> environment
+    }
+    
+    class AuthorizationResponse {
+        -boolean allowed
+        -String policyId
+        -List<String> denyReasons
+        -List<Map<String,Object>> obligations
+        -Integer riskScore
+    }
+}
+
+package "Service" {
+    class AuthorizationService {
+        -Map<String, Map<String, Set<String>>> ROLE_PERMISSIONS
+        +authorize(AuthorizationRequest): AuthorizationResponse
+        +hasPermission(String, String): boolean
+        -checkRbacPermission()
+        -checkDenyRules()
+        -checkAbacConditions()
+        -calculateRiskScore()
+        -addObligations()
+    }
+}
+
+User "N" -- "1" Role
+Role "N" -- "N" Permission
+User ..> UserPrincipal : creates
+AuthorizationService --> AuthorizationRequest : uses
+AuthorizationService --> AuthorizationResponse : returns
+AuthorizationService --> AuditLog : creates
+
+@enduml
+
+@startuml use-case-diagram
+!theme cerulean
+title Use Case Diagram: EMR System Roles
+
+left to right direction
+
+actor "Doctor" as doctor
+actor "Nurse" as nurse
+actor "Receptionist" as receptionist
+actor "Cashier" as cashier
+actor "HR" as hr
+actor "Manager" as manager
+actor "ITAdmin" as itadmin
+actor "SecurityAdmin" as secadmin
+
+rectangle "EMR System" {
+    ' Clinical
+    usecase "Xem hồ sơ bệnh án" as UC1
+    usecase "Tạo/Sửa hồ sơ bệnh án" as UC2
+    usecase "Tạo đơn thuốc" as UC3
+    usecase "Phê duyệt đơn thuốc" as UC4
+    usecase "Yêu cầu xét nghiệm" as UC5
+    usecase "Xem kết quả xét nghiệm" as UC6
+    usecase "Ghi nhận sinh hiệu" as UC7
+    usecase "Tạo tóm tắt xuất viện" as UC8
+    
+    ' Administrative
+    usecase "Đăng ký bệnh nhân" as UC9
+    usecase "Quản lý lịch hẹn" as UC10
+    usecase "Nhập viện/Chuyển khoa" as UC11
+    
+    ' Finance
+    usecase "Tạo hóa đơn" as UC12
+    usecase "Phê duyệt Invoice" as UC13
+    usecase "Quản lý bảo hiểm" as UC14
+    usecase "Xem báo cáo tài chính" as UC15
+    
+    ' HR
+    usecase "Quản lý nhân viên" as UC16
+    usecase "Quản lý lịch làm việc" as UC17
+    usecase "Quản lý đào tạo" as UC18
+    usecase "Xem báo cáo vận hành" as UC19
+    
+    ' IT/Security
+    usecase "Cấu hình hệ thống" as UC20
+    usecase "Quản lý Access Policy" as UC21
+    usecase "Xem Audit Logs" as UC22
+    usecase "Quản lý sự cố" as UC23
+    
+    ' Reports
+    usecase "Xem báo cáo y tế" as UC24
+}
+
+' Doctor
+doctor --> UC1
+doctor --> UC2
+doctor --> UC3
+doctor --> UC4
+doctor --> UC5
+doctor --> UC6
+doctor --> UC8
+doctor --> UC24
+
+' Nurse
+nurse --> UC1
+nurse --> UC6
+nurse --> UC7
+
+' Receptionist
+receptionist --> UC9
+receptionist --> UC10
+receptionist --> UC11
+
+' Cashier
+cashier --> UC12
+cashier --> UC13
+cashier --> UC14
+cashier --> UC15
+
+' HR
+hr --> UC16
+hr --> UC17
+hr --> UC18
+hr --> UC19
+
+' Manager
+manager --> UC15
+manager --> UC16 : (read only)
+manager --> UC17 : (read only)
+manager --> UC19
+manager --> UC24
+
+' ITAdmin
+itadmin --> UC20
+itadmin --> UC21 : (read only)
+itadmin --> UC22
+
+' SecurityAdmin
+secadmin --> UC20 : (read only)
+secadmin --> UC21
+secadmin --> UC22
+secadmin --> UC23
+
+@enduml
+
+@startuml component-diagram
+!theme cerulean
+title Component Diagram: System Architecture
+
+package "Client Layer" {
+    [Web Browser] as browser
+    [Mobile App] as mobile
+    [API Client] as apiclient
+}
+
+package "API Gateway" {
+    [Spring Security\nFilter Chain] as security
+    [JWT Authentication\nFilter] as jwtfilter
+}
+
+package "Controller Layer" {
+    [AuthController] as authCtrl
+    [AuthorizationController] as authzCtrl
+    [AuditController] as auditCtrl
+    [UserController] as userCtrl
+    
+    package "Mock API Controllers" {
+        [PatientController] as patientCtrl
+        [MedicalRecordController] as mrCtrl
+        [PrescriptionController] as rxCtrl
+        [BillingController] as billCtrl
+        [StaffController] as staffCtrl
+        [SystemController] as sysCtrl
+        [... 7 more controllers] as otherCtrl
+    }
+}
+
+package "Service Layer" {
+    [AuthService] as authSvc
+    [AuthorizationService] as authzSvc
+    [AuditService] as auditSvc
+    [CustomUserDetailsService] as userSvc
+}
+
+package "Security Components" {
+    [JwtTokenProvider] as jwt
+    [UserPrincipal] as principal
+}
+
+package "Repository Layer" {
+    [UserRepository] as userRepo
+    [RoleRepository] as roleRepo
+    [PermissionRepository] as permRepo
+    [AuditLogRepository] as auditRepo
+}
+
+database "PostgreSQL" as db {
+    [users]
+    [roles]
+    [permissions]
+    [audit_logs]
+    [role_permissions]
+    [user_permissions]
+}
+
+' Connections
+browser --> security
+mobile --> security
+apiclient --> security
+
+security --> jwtfilter
+jwtfilter --> authCtrl
+jwtfilter --> authzCtrl
+jwtfilter --> auditCtrl
+jwtfilter --> userCtrl
+jwtfilter --> patientCtrl
+jwtfilter --> mrCtrl
+jwtfilter --> rxCtrl
+jwtfilter --> billCtrl
+jwtfilter --> staffCtrl
+jwtfilter --> sysCtrl
+
+authCtrl --> authSvc
+authzCtrl --> authzSvc
+auditCtrl --> auditSvc
+patientCtrl --> authzSvc
+mrCtrl --> authzSvc
+rxCtrl --> authzSvc
+
+authSvc --> jwt
+authSvc --> userSvc
+authzSvc --> auditRepo
+
+userSvc --> userRepo
+userRepo --> db
+roleRepo --> db
+permRepo --> db
+auditRepo --> db
+
+@enduml
+
+@startuml state-diagram-prescription
+!theme cerulean
+title State Diagram: Prescription Lifecycle
+
+[*] --> Draft : Doctor creates
+
+Draft --> Pending : Doctor submits
+Draft --> Cancelled : Doctor cancels
+
+Pending --> Approved : Another Doctor approves\n(SoD enforced)
+Pending --> Draft : Doctor requests revision
+Pending --> Cancelled : Doctor/Admin cancels
+
+Approved --> Dispensed : Pharmacy dispenses
+
+Dispensed --> [*]
+Cancelled --> [*]
+
+note right of Pending
+  **Separation of Duties:**
+  Creator cannot approve
+  their own prescription
+end note
+
+note right of Approved
+  Requires:
+  - Different doctor than creator
+  - Same branch
+  - Valid license
+end note
+
+@enduml
+
+@startuml activity-diagram-authorization
+!theme cerulean
+title Activity Diagram: Authorization Decision Process
+
+start
+
+:Receive Authorization Request;
+note right
+  - resourceType
+  - action
+  - resourceBranch
+  - patientId
+  - createdBy
+  - environment
+end note
+
+:Extract UserPrincipal from SecurityContext;
+
+partition "RBAC Check" {
+    :Get role permissions map;
+    if (Role has permission for\nresource + action?) then (yes)
+        :RBAC = ALLOW;
+    else (no)
+        :RBAC = DENY;
+        :Add to denyReasons;
+    endif
+}
+
+partition "Deny Rules Check" {
+    :Check explicit deny rules;
+    
+    if (Receptionist accessing clinical data?) then (yes)
+        :Add RECEPTIONIST_NO_CLINICAL_ACCESS;
+    endif
+    
+    if (Delete action on patient data?) then (yes)
+        :Add NO_DELETE_PATIENT_DATA;
+    endif
+    
+    if (Branch mismatch?) then (yes)
+        :Add BRANCH_MISMATCH;
+    endif
+    
+    if (Creator trying to approve?) then (yes)
+        :Add SOD_CREATOR_CANNOT_APPROVE;
+    endif
+    
+    if (Export without approval?) then (yes)
+        :Add EXPORT_REQUIRES_APPROVAL;
+    endif
+}
+
+partition "ABAC Check" {
+    if (Clinical resource?) then (yes)
+        if (Doctor role?) then (yes)
+            :Check patient assigned;
+        else (Nurse role)
+            :Check patient assigned;
+            :Check same department;
+        endif
+    endif
+    
+    if (PatientProfile or Appointment?) then (yes)
+        :Check same branch;
+    endif
+}
+
+partition "Risk Scoring" {
+    :Initialize score = 0;
+    
+    if (Off-hours access?) then (yes)
+        :score += 2;
+    endif
+    
+    if (Export action?) then (yes)
+        :score += 3;
+    endif
+    
+    if (High-risk resource?) then (yes)
+        :score += 3;
+    endif
+}
+
+:Determine final decision;
+note right
+  allowed = RBAC_OK 
+    && ABAC_OK 
+    && denyReasons.isEmpty()
+end note
+
+if (allowed?) then (yes)
+    partition "Add Obligations" {
+        if (Off-hours?) then (yes)
+            :Add step_up_mfa obligation;
+        endif
+        
+        if (PatientProfile && !Receptionist?) then (yes)
+            :Add mask_fields obligation;
+        endif
+        
+        if (High-risk action?) then (yes)
+            :Add log_high_risk obligation;
+        endif
+    }
+endif
+
+:Log to AuditLog;
+:Return AuthorizationResponse;
+
+stop
+
+@enduml
+
+' ============================================
+' USE CASE DIAGRAMS - CHI TIẾT THEO DOMAIN
+' ============================================
+
+@startuml usecase-overview
+!theme cerulean
+title Use Case Tổng quan: Hệ thống EMR với RBAC/ABAC
+
+left to right direction
+skinparam actorStyle awesome
+skinparam packageStyle rectangle
+
+actor "Bác sĩ\n(Doctor)" as doctor #LightBlue
+actor "Y tá\n(Nurse)" as nurse #LightGreen
+actor "Lễ tân\n(Receptionist)" as receptionist #LightYellow
+actor "Thu ngân\n(Cashier)" as cashier #LightPink
+actor "Nhân sự\n(HR)" as hr #LightCoral
+actor "Quản lý\n(Manager)" as manager #Lavender
+actor "IT Admin" as itadmin #LightGray
+actor "Security Admin" as secadmin #Tomato
+
+rectangle "Hệ thống EMR" {
+    package "🏥 Clinical Domain" as clinical {
+        usecase "Quản lý Hồ sơ Bệnh án" as UC_MR
+        usecase "Quản lý Đơn thuốc" as UC_RX
+        usecase "Xét nghiệm & CĐHA" as UC_LAB
+        usecase "Ghi nhận Sinh hiệu" as UC_VITAL
+    }
+    
+    package "📋 Administrative Domain" as admin {
+        usecase "Đăng ký Bệnh nhân" as UC_PAT
+        usecase "Quản lý Lịch hẹn" as UC_APT
+        usecase "Nhập/Xuất viện" as UC_ADM
+    }
+    
+    package "💰 Finance Domain" as finance {
+        usecase "Thanh toán & Hóa đơn" as UC_BILL
+        usecase "Bảo hiểm Y tế" as UC_INS
+        usecase "Báo cáo Tài chính" as UC_FIN_RPT
+    }
+    
+    package "👥 HR Domain" as hrdomain {
+        usecase "Quản lý Nhân viên" as UC_STAFF
+        usecase "Lịch làm việc" as UC_SCHED
+        usecase "Đào tạo & Chứng chỉ" as UC_TRAIN
+    }
+    
+    package "⚙️ System Domain" as system {
+        usecase "Cấu hình Hệ thống" as UC_CONFIG
+        usecase "Chính sách Truy cập" as UC_POLICY
+        usecase "Audit & Giám sát" as UC_AUDIT
+        usecase "Quản lý Sự cố" as UC_INCIDENT
+    }
+    
+    package "📊 Reporting Domain" as reporting {
+        usecase "Báo cáo Y tế" as UC_MED_RPT
+        usecase "Báo cáo Vận hành" as UC_OP_RPT
+    }
+}
+
+' Doctor connections
+doctor --> UC_MR
+doctor --> UC_RX
+doctor --> UC_LAB
+doctor --> UC_MED_RPT
+
+' Nurse connections
+nurse --> UC_MR : <<read>>
+nurse --> UC_VITAL
+nurse --> UC_LAB : <<read>>
+
+' Receptionist connections
+receptionist --> UC_PAT
+receptionist --> UC_APT
+receptionist --> UC_ADM
+
+' Cashier connections
+cashier --> UC_BILL
+cashier --> UC_INS
+cashier --> UC_FIN_RPT
+
+' HR connections
+hr --> UC_STAFF
+hr --> UC_SCHED
+hr --> UC_TRAIN
+hr --> UC_OP_RPT
+
+' Manager connections
+manager --> UC_FIN_RPT : <<read>>
+manager --> UC_OP_RPT : <<read>>
+manager --> UC_MED_RPT : <<read>>
+manager --> UC_STAFF : <<read>>
+
+' IT Admin connections
+itadmin --> UC_CONFIG
+itadmin --> UC_POLICY : <<read>>
+itadmin --> UC_AUDIT
+
+' Security Admin connections
+secadmin --> UC_CONFIG : <<read>>
+secadmin --> UC_POLICY
+secadmin --> UC_AUDIT
+secadmin --> UC_INCIDENT
+
+@enduml
+
+@startuml usecase-clinical-domain
+!theme cerulean
+title Use Case: Clinical Domain (Bác sĩ & Y tá)
+
+left to right direction
+skinparam actorStyle awesome
+
+actor "Bác sĩ" as doctor #LightBlue
+actor "Y tá" as nurse #LightGreen
+actor "Bệnh nhân" as patient #WhiteSmoke
+
+rectangle "Clinical Domain" {
+    package "Hồ sơ Bệnh án" {
+        usecase "Xem hồ sơ bệnh án" as UC1
+        usecase "Tạo hồ sơ bệnh án mới" as UC2
+        usecase "Cập nhật hồ sơ" as UC3
+        usecase "Export hồ sơ" as UC4
+    }
+    
+    package "Ghi chú Lâm sàng" {
+        usecase "Xem ghi chú" as UC5
+        usecase "Tạo ghi chú tiến triển" as UC6
+        usecase "Tạo ghi chú đánh giá" as UC7
+    }
+    
+    package "Sinh hiệu" {
+        usecase "Xem sinh hiệu" as UC8
+        usecase "Ghi nhận sinh hiệu" as UC9
+        usecase "Cập nhật sinh hiệu" as UC10
+    }
+    
+    package "Đơn thuốc" {
+        usecase "Xem đơn thuốc" as UC11
+        usecase "Tạo đơn thuốc" as UC12
+        usecase "Sửa đơn thuốc" as UC13
+        usecase "Phê duyệt đơn thuốc" as UC14
+    }
+    
+    package "Xét nghiệm" {
+        usecase "Yêu cầu xét nghiệm" as UC15
+        usecase "Xem kết quả xét nghiệm" as UC16
+    }
+    
+    package "Chẩn đoán Hình ảnh" {
+        usecase "Yêu cầu CĐHA" as UC17
+        usecase "Xem kết quả CĐHA" as UC18
+    }
+    
+    package "Xuất viện" {
+        usecase "Tạo tóm tắt xuất viện" as UC19
+        usecase "Xem tóm tắt xuất viện" as UC20
+    }
+}
+
+' Doctor - Full access
+doctor --> UC1
+doctor --> UC2
+doctor --> UC3
+doctor --> UC4 : <<cần approval>>
+doctor --> UC5
+doctor --> UC6
+doctor --> UC7
+doctor --> UC8
+doctor --> UC11
+doctor --> UC12
+doctor --> UC13
+doctor --> UC14 : <<SoD: không tự approve>>
+doctor --> UC15
+doctor --> UC16
+doctor --> UC17
+doctor --> UC18
+doctor --> UC19
+doctor --> UC20
+
+' Nurse - Limited access
+nurse --> UC1 : <<chỉ đọc>>
+nurse --> UC5 : <<chỉ đọc>>
+nurse --> UC8
+nurse --> UC9
+nurse --> UC10
+nurse --> UC16 : <<chỉ đọc>>
+nurse --> UC18 : <<chỉ đọc>>
+nurse --> UC20 : <<chỉ đọc>>
+
+' Patient as beneficiary
+UC1 ..> patient : <<liên quan>>
+UC11 ..> patient : <<liên quan>>
+
+note right of UC4
+  **ABAC Rule:**
+  Export cần approval
+  hoặc emergency mode
+end note
+
+note right of UC14
+  **SoD Rule:**
+  Bác sĩ tạo đơn
+  không thể tự approve
+end note
+
+note bottom of nurse
+  **ABAC Constraints:**
+  - Chỉ bệnh nhân được assign
+  - Cùng khoa (department)
+  - Cùng chi nhánh (branch)
+end note
+
+@enduml
+
+@startuml usecase-administrative-domain
+!theme cerulean
+title Use Case: Administrative Domain (Lễ tân)
+
+left to right direction
+skinparam actorStyle awesome
+
+actor "Lễ tân" as receptionist #LightYellow
+actor "Bệnh nhân" as patient #WhiteSmoke
+actor "Bác sĩ" as doctor #LightBlue
+
+rectangle "Administrative Domain" {
+    package "Quản lý Bệnh nhân" {
+        usecase "Đăng ký bệnh nhân mới" as UC1
+        usecase "Xem thông tin bệnh nhân" as UC2
+        usecase "Cập nhật thông tin" as UC3
+        usecase "Tìm kiếm bệnh nhân" as UC4
+    }
+    
+    package "Quản lý Lịch hẹn" {
+        usecase "Tạo lịch hẹn" as UC5
+        usecase "Xem lịch hẹn" as UC6
+        usecase "Cập nhật lịch hẹn" as UC7
+        usecase "Hủy lịch hẹn" as UC8
+        usecase "Check-in bệnh nhân" as UC9
+        usecase "Đánh dấu No-show" as UC10
+    }
+    
+    package "Nhập viện / Xuất viện" {
+        usecase "Tạo bản ghi nhập viện" as UC11
+        usecase "Xem thông tin nhập viện" as UC12
+        usecase "Yêu cầu chuyển khoa" as UC13
+        usecase "Xem lịch sử chuyển khoa" as UC14
+    }
+}
+
+' Receptionist - Full CRUD
+receptionist --> UC1
+receptionist --> UC2
+receptionist --> UC3
+receptionist --> UC4
+receptionist --> UC5
+receptionist --> UC6
+receptionist --> UC7
+receptionist --> UC8
+receptionist --> UC9
+receptionist --> UC10
+receptionist --> UC11
+receptionist --> UC12
+receptionist --> UC13
+receptionist --> UC14
+
+' Relationships
+UC1 ..> patient : <<tạo hồ sơ cho>>
+UC5 ..> patient : <<đặt lịch cho>>
+UC5 ..> doctor : <<với bác sĩ>>
+UC11 ..> patient : <<nhập viện>>
+
+note right of receptionist
+  **Deny Rules:**
+  ❌ Không truy cập Clinical Data
+  ❌ Không xem MedicalRecord
+  ❌ Không xem Prescription
+  ❌ Không xem LabResult
+end note
+
+note bottom of UC2
+  **ABAC:**
+  Chỉ bệnh nhân
+  cùng chi nhánh
+end note
+
+@enduml
+
+@startuml usecase-finance-domain
+!theme cerulean
+title Use Case: Finance Domain (Thu ngân & Quản lý)
+
+left to right direction
+skinparam actorStyle awesome
+
+actor "Thu ngân" as cashier #LightPink
+actor "Quản lý" as manager #Lavender
+actor "Bệnh nhân" as patient #WhiteSmoke
+
+rectangle "Finance Domain" {
+    package "Hóa đơn & Thanh toán" {
+        usecase "Tạo hóa đơn" as UC1
+        usecase "Xem hóa đơn" as UC2
+        usecase "Cập nhật hóa đơn" as UC3
+        usecase "Tính tổng chi phí" as UC4
+    }
+    
+    package "Invoice" {
+        usecase "Tạo Invoice" as UC5
+        usecase "Xem Invoice" as UC6
+        usecase "Phê duyệt Invoice" as UC7
+        usecase "Gửi Invoice cho BN" as UC8
+        usecase "Ghi nhận thanh toán" as UC9
+    }
+    
+    package "Bảo hiểm Y tế" {
+        usecase "Tạo yêu cầu bảo hiểm" as UC10
+        usecase "Xem claim bảo hiểm" as UC11
+        usecase "Cập nhật claim" as UC12
+        usecase "Theo dõi trạng thái" as UC13
+    }
+    
+    package "Báo cáo Tài chính" {
+        usecase "Xem báo cáo doanh thu" as UC14
+        usecase "Xem báo cáo công nợ" as UC15
+        usecase "Xem thống kê thanh toán" as UC16
+    }
+}
+
+' Cashier - Full CRUD on billing
+cashier --> UC1
+cashier --> UC2
+cashier --> UC3
+cashier --> UC4
+cashier --> UC5
+cashier --> UC6
+cashier --> UC7 : <<SoD áp dụng>>
+cashier --> UC8
+cashier --> UC9
+cashier --> UC10
+cashier --> UC11
+cashier --> UC12
+cashier --> UC13
+cashier --> UC14
+
+' Manager - Read only reports
+manager --> UC14 : <<chỉ đọc>>
+manager --> UC15 : <<chỉ đọc>>
+manager --> UC16 : <<chỉ đọc>>
+
+' Relationships
+UC1 ..> patient : <<cho bệnh nhân>>
+UC10 ..> patient : <<claim cho>>
+
+note right of UC7
+  **SoD Rule:**
+  Người tạo Invoice
+  không thể tự approve
+end note
+
+note right of cashier
+  **Deny Rules:**
+  ❌ Không truy cập Clinical Data
+  ❌ Không xem MedicalRecord
+  ❌ Không xem Prescription
+end note
+
+note bottom of manager
+  **ABAC:**
+  Manager chỉ xem
+  báo cáo cùng chi nhánh
+  và cùng phòng ban
+end note
+
+@enduml
+
+@startuml usecase-hr-domain
+!theme cerulean
+title Use Case: HR Domain (Nhân sự & Quản lý)
+
+left to right direction
+skinparam actorStyle awesome
+
+actor "Nhân sự\n(HR)" as hr #LightCoral
+actor "Quản lý" as manager #Lavender
+actor "Nhân viên" as staff #WhiteSmoke
+
+rectangle "HR Domain" {
+    package "Quản lý Nhân viên" {
+        usecase "Tạo hồ sơ nhân viên" as UC1
+        usecase "Xem hồ sơ nhân viên" as UC2
+        usecase "Cập nhật hồ sơ" as UC3
+        usecase "Tìm kiếm nhân viên" as UC4
+        usecase "Quản lý trạng thái" as UC5
+    }
+    
+    package "Lịch làm việc" {
+        usecase "Tạo lịch làm việc" as UC6
+        usecase "Xem lịch làm việc" as UC7
+        usecase "Cập nhật ca làm" as UC8
+        usecase "Phân công ca trực" as UC9
+    }
+    
+    package "Đào tạo & Chứng chỉ" {
+        usecase "Tạo hồ sơ đào tạo" as UC10
+        usecase "Xem lịch sử đào tạo" as UC11
+        usecase "Cập nhật chứng chỉ" as UC12
+        usecase "Theo dõi hết hạn" as UC13
+    }
+    
+    package "Báo cáo Vận hành" {
+        usecase "Xem báo cáo nhân sự" as UC14
+        usecase "Xem thống kê chấm công" as UC15
+        usecase "Xem hiệu suất đào tạo" as UC16
+    }
+}
+
+' HR - Full CRUD
+hr --> UC1
+hr --> UC2
+hr --> UC3
+hr --> UC4
+hr --> UC5
+hr --> UC6
+hr --> UC7
+hr --> UC8
+hr --> UC9
+hr --> UC10
+hr --> UC11
+hr --> UC12
+hr --> UC13
+hr --> UC14
+hr --> UC15
+hr --> UC16
+
+' Manager - Limited read
+manager --> UC2 : <<chỉ đọc, cùng khoa>>
+manager --> UC7 : <<chỉ đọc, cùng khoa>>
+manager --> UC14 : <<chỉ đọc>>
+
+' Relationships
+UC1 ..> staff : <<tạo cho>>
+UC6 ..> staff : <<lên lịch cho>>
+UC10 ..> staff : <<ghi nhận>>
+
+note right of hr
+  **Deny Rules:**
+  ❌ Không truy cập Patient Data
+  ❌ Không truy cập Finance Data
+  ❌ Không xem MedicalRecord
+  ❌ Không xem BillingRecord
+end note
+
+note bottom of manager
+  **ABAC Constraints:**
+  - Chỉ nhân viên cùng chi nhánh
+  - Chỉ nhân viên cùng phòng ban
+end note
+
+@enduml
+
+@startuml usecase-system-domain
+!theme cerulean
+title Use Case: System Domain (IT Admin & Security Admin)
+
+left to right direction
+skinparam actorStyle awesome
+
+actor "IT Admin" as itadmin #LightGray
+actor "Security Admin" as secadmin #Tomato
+
+rectangle "System Domain" {
+    package "Cấu hình Hệ thống" {
+        usecase "Xem cấu hình" as UC1
+        usecase "Cập nhật cấu hình" as UC2
+        usecase "Quản lý tham số bảo mật" as UC3
+        usecase "Cấu hình tích hợp" as UC4
+    }
+    
+    package "Chính sách Truy cập" {
+        usecase "Xem Access Policy" as UC5
+        usecase "Tạo Policy mới" as UC6
+        usecase "Cập nhật Policy" as UC7
+        usecase "Bật/Tắt Policy" as UC8
+    }
+    
+    package "Audit & Giám sát" {
+        usecase "Xem Audit Logs" as UC9
+        usecase "Tìm kiếm logs" as UC10
+        usecase "Thống kê audit" as UC11
+        usecase "Export audit logs" as UC12
+    }
+    
+    package "Quản lý Sự cố" {
+        usecase "Báo cáo sự cố" as UC13
+        usecase "Xem danh sách sự cố" as UC14
+        usecase "Cập nhật sự cố" as UC15
+        usecase "Phân công xử lý" as UC16
+        usecase "Đóng sự cố" as UC17
+        usecase "Thống kê sự cố" as UC18
+    }
+}
+
+' IT Admin
+itadmin --> UC1
+itadmin --> UC2
+itadmin --> UC3
+itadmin --> UC4
+itadmin --> UC5 : <<chỉ đọc>>
+itadmin --> UC9
+itadmin --> UC10
+itadmin --> UC11
+
+' Security Admin
+secadmin --> UC1 : <<chỉ đọc>>
+secadmin --> UC5
+secadmin --> UC6
+secadmin --> UC7
+secadmin --> UC8
+secadmin --> UC9
+secadmin --> UC10
+secadmin --> UC11
+secadmin --> UC12
+secadmin --> UC13
+secadmin --> UC14
+secadmin --> UC15
+secadmin --> UC16
+secadmin --> UC17
+secadmin --> UC18
+
+note right of itadmin
+  **Deny Rules:**
+  ❌ Không truy cập Patient Data
+  ❌ Không xem PatientProfile
+  ❌ Không xem MedicalRecord
+  ❌ Không quản lý Incident
+end note
+
+note right of secadmin
+  **Permissions:**
+  ✅ Full Incident Management
+  ✅ Access Policy CRUD
+  ✅ Audit Log access
+  ✅ SystemConfig (read only)
+end note
+
+@enduml
+
+@startuml usecase-authentication
+!theme cerulean
+title Use Case: Authentication & Authorization
+
+left to right direction
+skinparam actorStyle awesome
+
+actor "Người dùng" as user
+actor "Hệ thống" as system
+
+rectangle "Authentication & Authorization" {
+    package "Xác thực (Authentication)" {
+        usecase "Đăng nhập" as UC1
+        usecase "Đăng xuất" as UC2
+        usecase "Xem thông tin cá nhân" as UC3
+        usecase "Refresh Token" as UC4
+    }
+    
+    package "Phân quyền (Authorization)" {
+        usecase "Kiểm tra quyền" as UC5
+        usecase "Kiểm tra nhanh permission" as UC6
+        usecase "Kiểm tra batch permissions" as UC7
+    }
+    
+    package "Audit" {
+        usecase "Ghi log truy cập" as UC8
+        usecase "Đánh giá rủi ro" as UC9
+        usecase "Thêm obligations" as UC10
+    }
+}
+
+user --> UC1
+user --> UC2
+user --> UC3
+user --> UC4
+user --> UC5
+user --> UC6
+user --> UC7
+
+UC5 ..> UC8 : <<include>>
+UC5 ..> UC9 : <<include>>
+UC5 ..> UC10 : <<include>>
+
+system --> UC8
+system --> UC9
+system --> UC10
+
+note right of UC5
+  **Authorization Flow:**
+  1. RBAC Check
+  2. Deny Rules Check
+  3. ABAC Check
+  4. Risk Scoring
+  5. Add Obligations
+  6. Audit Logging
+end note
+
+note bottom of UC9
+  **Risk Factors:**
+  - Off-hours: +2
+  - Export action: +3
+  - High sensitivity: +2
+  - High-risk resource: +3
+end note
+
+@enduml
+
+@startuml usecase-abac-scenarios
+!theme cerulean
+title Use Case: ABAC Scenarios & Constraints
+
+left to right direction
+skinparam actorStyle awesome
+
+actor "Bác sĩ CN_HN" as doc_hn #LightBlue
+actor "Bác sĩ CN_HCM" as doc_hcm #LightBlue
+actor "Y tá Khoa Nội" as nurse_noi #LightGreen
+actor "Y tá Khoa Ngoại" as nurse_ngoai #LightGreen
+
+rectangle "ABAC Scenarios" {
+    package "Branch Constraint" {
+        usecase "Xem BN chi nhánh HN" as UC1
+        usecase "Xem BN chi nhánh HCM" as UC2
+    }
+    
+    package "Department Constraint" {
+        usecase "Xem BN Khoa Nội" as UC3
+        usecase "Xem BN Khoa Ngoại" as UC4
+    }
+    
+    package "Patient Assignment" {
+        usecase "Xem BN được assign" as UC5
+        usecase "Xem BN không được assign" as UC6
+    }
+    
+    package "Separation of Duties" {
+        usecase "Tạo Prescription" as UC7
+        usecase "Approve Prescription" as UC8
+    }
+}
+
+' Branch scenarios
+doc_hn --> UC1 : ✅ Allowed
+doc_hn --> UC2 : ❌ BRANCH_MISMATCH
+doc_hcm --> UC1 : ❌ BRANCH_MISMATCH
+doc_hcm --> UC2 : ✅ Allowed
+
+' Department scenarios
+nurse_noi --> UC3 : ✅ Allowed
+nurse_noi --> UC4 : ❌ Denied
+nurse_ngoai --> UC3 : ❌ Denied
+nurse_ngoai --> UC4 : ✅ Allowed
+
+' Patient assignment scenarios
+doc_hn --> UC5 : ✅ Allowed
+doc_hn --> UC6 : ❌ Not Assigned
+
+' SoD scenarios
+doc_hn --> UC7 : ✅ Create
+doc_hn --> UC8 : ❌ SOD (own prescription)
+doc_hcm --> UC8 : ✅ Approve (other's prescription)
+
+note bottom of UC1
+  **Branch Check:**
+  user.branch == resource.branch
+end note
+
+note bottom of UC3
+  **Department Check:**
+  user.department == resource.department
+  (Required for Nurse role)
+end note
+
+note right of UC6
+  **Patient Assignment:**
+  patientId ∈ user.assignedPatients
+end note
+
+note right of UC8
+  **SoD Rule:**
+  resource.createdBy != user.userId
+end note
+
+@enduml
+
+@startuml er-diagram
+!theme cerulean
+title Entity Relationship Diagram
+
+entity "users" as users {
+    *id : BIGSERIAL <<PK>>
+    --
+    *user_id : VARCHAR(50) <<UK>>
+    *username : VARCHAR(100) <<UK>>
+    *password : VARCHAR(255)
+    *role_id : BIGINT <<FK>>
+    department : VARCHAR(100)
+    branch : VARCHAR(50)
+    position : VARCHAR(100)
+    has_license : BOOLEAN
+    seniority : VARCHAR(20)
+    employment_type : VARCHAR(20)
+    enabled : BOOLEAN
+    account_non_expired : BOOLEAN
+    account_non_locked : BOOLEAN
+    credentials_non_expired : BOOLEAN
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+}
+
+entity "roles" as roles {
+    *id : BIGSERIAL <<PK>>
+    --
+    *name : VARCHAR(50) <<UK>>
+    description : VARCHAR(255)
+}
+
+entity "permissions" as permissions {
+    *id : BIGSERIAL <<PK>>
+    --
+    *resource_type : VARCHAR(100)
+    *action : VARCHAR(50)
+    scope : VARCHAR(50)
+    description : VARCHAR(255)
+    *permission_key : VARCHAR(255) <<UK>>
+}
+
+entity "role_permissions" as role_perm {
+    *role_id : BIGINT <<FK>>
+    *permission_id : BIGINT <<FK>>
+}
+
+entity "user_permissions" as user_perm {
+    *user_id : BIGINT <<FK>>
+    *permission_id : BIGINT <<FK>>
+}
+
+entity "user_assigned_patients" as user_patients {
+    *user_id : BIGINT <<FK>>
+    *patient_id : VARCHAR(50)
+}
+
+entity "audit_logs" as audit {
+    *id : BIGSERIAL <<PK>>
+    --
+    *user_id : VARCHAR(50)
+    *resource_type : VARCHAR(100)
+    *resource_id : VARCHAR(100)
+    *action : VARCHAR(50)
+    *allowed : BOOLEAN
+    policy_id : VARCHAR(255)
+    deny_reasons : VARCHAR(1000)
+    risk_score : INTEGER
+    *timestamp : TIMESTAMP
+    ip_address : VARCHAR(50)
+    user_agent : VARCHAR(500)
+}
+
+users ||--o{ role_perm : "role_id"
+users ||--o{ user_perm : "user_id"
+users ||--o{ user_patients : "user_id"
+roles ||--o{ role_perm : "role_id"
+permissions ||--o{ role_perm : "permission_id"
+permissions ||--o{ user_perm : "permission_id"
+
+@enduml
+
