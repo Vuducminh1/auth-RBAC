@@ -81,34 +81,68 @@ src/main/java/com/auth/auth_service/
 - Java 21+
 - PostgreSQL 13+
 - Maven 3.6+
+- Python 3.11+ (cho AI Service)
 
-### 1. Cài đặt PostgreSQL
+### Cách 1: Docker Compose (Khuyến nghị - Full stack)
 
 ```bash
-# Sử dụng Docker (khuyến nghị)
+# Chạy tất cả services (PostgreSQL + AI + Backend)
+docker-compose up -d
+
+# Hoặc sử dụng script
+./run-services.bat docker   # Windows
+./run-services.sh docker    # Linux/Mac
+
+# Xem logs
+docker-compose logs -f
+
+# Dừng services
+docker-compose down
+```
+
+**Services:**
+- Backend: http://localhost:8080
+- AI Service: http://localhost:8000
+- PostgreSQL: localhost:5432
+
+### Cách 2: Chạy thủ công (Development)
+
+#### 1. Cài đặt PostgreSQL
+
+```bash
+# Sử dụng Docker
 docker run -d \
   --name postgres-auth \
-  -e POSTGRES_PASSWORD=postgres \
+  -e POSTGRES_PASSWORD=123456 \
   -e POSTGRES_DB=auth_rbac_db \
   -p 5432:5432 \
   postgres:15
-
-# Hoặc tạo database thủ công
-psql -U postgres -c "CREATE DATABASE auth_rbac_db;"
 ```
 
-### 2. Cấu hình (tùy chọn)
-
-Cập nhật `src/main/resources/application.properties` nếu cần:
-```properties
-spring.datasource.url=jdbc:postgresql://localhost:5432/auth_rbac_db
-spring.datasource.username=postgres
-spring.datasource.password=postgres
-```
-
-### 3. Build và chạy
+#### 2. Chạy AI Service (PoweredAI-RBAC)
 
 ```bash
+cd ../PoweredAI-RBAC
+
+# Tạo virtual environment
+python -m venv .venv
+.venv\Scripts\activate   # Windows
+source .venv/bin/activate  # Linux/Mac
+
+# Cài dependencies
+pip install -r requirements.txt
+
+# Chạy FastAPI
+uvicorn api:app --reload --port 8000
+```
+
+AI Service chạy tại: **http://localhost:8000**
+
+#### 3. Chạy Backend (auth-RBAC)
+
+```bash
+cd ../auth-RBAC
+
 # Build project
 ./mvnw clean package -DskipTests
 
@@ -116,13 +150,7 @@ spring.datasource.password=postgres
 ./mvnw spring-boot:run
 ```
 
-Ứng dụng chạy tại: **http://localhost:8080**
-
-### 4. Docker Compose (Full stack)
-
-```bash
-docker-compose up -d
-```
+Backend chạy tại: **http://localhost:8080**
 
 ---
 
@@ -162,6 +190,16 @@ docker-compose up -d
 | GET | `/api/users/{userId}` | Lấy thông tin user |
 | GET | `/api/users/department/{dept}` | Lấy users theo phòng ban |
 | GET | `/api/users/branch/{branch}` | Lấy users theo chi nhánh |
+
+### 🤖 AI Recommendations (`/api/ai`)
+
+| Method | Endpoint | Mô tả | Roles |
+|--------|----------|-------|-------|
+| POST | `/api/ai/recommend/new-user` | Gợi ý quyền cho người dùng mới | HR, SecurityAdmin, Manager |
+| POST | `/api/ai/recommend/job-transfer` | Gợi ý quyền khi chuyển vị trí | HR, SecurityAdmin, Manager |
+| POST | `/api/ai/recommend/rightsizing` | Phát hiện quyền không sử dụng | SecurityAdmin, ITAdmin |
+| POST | `/api/ai/recommend/anomaly` | Phát hiện bất thường | SecurityAdmin |
+| GET | `/api/ai/health` | Kiểm tra kết nối AI service | Tất cả |
 
 ---
 
@@ -458,6 +496,54 @@ curl -X POST http://localhost:8080/api/mock/appointments \
 
 # Xem audit logs (ITAdmin/SecurityAdmin role)
 curl -X GET http://localhost:8080/api/mock/system/audit-logs \
+  -H "Authorization: Bearer <admin_token>"
+```
+
+### 4. Gọi AI Recommendation APIs
+
+```bash
+# Kiểm tra kết nối AI service (không cần auth)
+curl -X GET http://localhost:8080/api/ai/health
+
+# Gợi ý quyền cho người dùng mới (HR/SecurityAdmin/Manager)
+curl -X POST http://localhost:8080/api/ai/recommend/new-user \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <admin_token>" \
+  -d '{
+    "role": "Doctor",
+    "department": "Khoa_Noi",
+    "branch": "CN_HN",
+    "license": "Yes",
+    "seniority": "Senior"
+  }'
+
+# Gợi ý quyền khi chuyển vị trí
+curl -X POST http://localhost:8080/api/ai/recommend/job-transfer \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <admin_token>" \
+  -d '{
+    "old_profile": {
+      "role": "Doctor",
+      "department": "Khoa_Noi",
+      "branch": "CN_HN",
+      "license": "Yes",
+      "seniority": "Senior"
+    },
+    "new_profile": {
+      "role": "HR",
+      "department": "Phong_NhanSu",
+      "branch": "CN_HN",
+      "license": "No",
+      "seniority": "Senior"
+    }
+  }'
+
+# Rightsizing - phát hiện quyền không sử dụng
+curl -X POST "http://localhost:8080/api/ai/recommend/rightsizing?lookbackDays=90" \
+  -H "Authorization: Bearer <admin_token>"
+
+# Phát hiện bất thường
+curl -X POST "http://localhost:8080/api/ai/recommend/anomaly?riskThreshold=3" \
   -H "Authorization: Bearer <admin_token>"
 ```
 
