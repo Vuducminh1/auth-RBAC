@@ -2,8 +2,11 @@ package com.auth.auth_service.service;
 
 import com.auth.auth_service.dto.LoginRequest;
 import com.auth.auth_service.dto.LoginResponse;
+import com.auth.auth_service.dto.RegisterRequest;
 import com.auth.auth_service.dto.UserDto;
+import com.auth.auth_service.entity.Role;
 import com.auth.auth_service.entity.User;
+import com.auth.auth_service.repository.RoleRepository;
 import com.auth.auth_service.repository.UserRepository;
 import com.auth.auth_service.security.JwtTokenProvider;
 import com.auth.auth_service.security.UserPrincipal;
@@ -13,9 +16,11 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
@@ -26,6 +31,8 @@ public class AuthService {
     private final AuthenticationManager authenticationManager;
     private final JwtTokenProvider tokenProvider;
     private final UserRepository userRepository;
+    private final RoleRepository roleRepository;
+    private final PasswordEncoder passwordEncoder;
     
     @Transactional(readOnly = true)
     public LoginResponse login(LoginRequest loginRequest) {
@@ -65,6 +72,78 @@ public class AuthService {
                 .orElseThrow(() -> new RuntimeException("User not found"));
         
         return mapToUserDto(user);
+    }
+    
+    @Transactional
+    public UserDto register(RegisterRequest registerRequest) {
+        // Validate username không tồn tại
+        if (userRepository.existsByUsername(registerRequest.getUsername())) {
+            throw new RuntimeException("Username already exists: " + registerRequest.getUsername());
+        }
+        
+        // Validate email không tồn tại (nếu có)
+        if (registerRequest.getEmail() != null && !registerRequest.getEmail().isEmpty() 
+                && userRepository.existsByEmail(registerRequest.getEmail())) {
+            throw new RuntimeException("Email already exists: " + registerRequest.getEmail());
+        }
+        
+        // Tìm role
+        Role role = roleRepository.findByName(registerRequest.getRole())
+                .orElseThrow(() -> new RuntimeException("Role not found: " + registerRequest.getRole()));
+        
+        // Tạo userId unique
+        String userId = generateUserId(registerRequest.getRole());
+        
+        // Tạo user mới
+        User user = User.builder()
+                .userId(userId)
+                .username(registerRequest.getUsername())
+                .password(passwordEncoder.encode(registerRequest.getPassword()))
+                .email(registerRequest.getEmail())
+                .department(registerRequest.getDepartment())
+                .branch(registerRequest.getBranch())
+                .position(registerRequest.getPosition() != null ? registerRequest.getPosition() : "Staff")
+                .hasLicense(registerRequest.isHasLicense())
+                .seniority(registerRequest.getSeniority() != null ? registerRequest.getSeniority() : "Junior")
+                .employmentType(registerRequest.getEmploymentType() != null ? registerRequest.getEmploymentType() : "FullTime")
+                .role(role)
+                .enabled(true)
+                .accountNonExpired(true)
+                .accountNonLocked(true)
+                .credentialsNonExpired(true)
+                .build();
+        
+        User savedUser = userRepository.save(user);
+        
+        log.info("User registered successfully: {} with role {}", savedUser.getUsername(), role.getName());
+        
+        return mapToUserDto(savedUser);
+    }
+    
+    private String generateUserId(String roleName) {
+        String prefix = switch (roleName.toUpperCase()) {
+            case "DOCTOR" -> "DOC";
+            case "NURSE" -> "NUR";
+            case "RECEPTIONIST" -> "REC";
+            case "CASHIER" -> "CSH";
+            case "HR" -> "HR";
+            case "MANAGER" -> "MGR";
+            case "ITADMIN" -> "IT";
+            case "SECURITYADMIN" -> "SEC";
+            default -> "USR";
+        };
+        
+        // Generate unique ID
+        String uniquePart = UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+        String userId = prefix + uniquePart;
+        
+        // Đảm bảo userId unique
+        while (userRepository.existsByUserId(userId)) {
+            uniquePart = UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+            userId = prefix + uniquePart;
+        }
+        
+        return userId;
     }
     
     private UserDto mapToUserDto(User user) {

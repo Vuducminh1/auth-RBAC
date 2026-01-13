@@ -118,7 +118,7 @@ public class UnifiedMockController {
     @GetMapping("/types")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getSupportedTypes() {
         Map<String, Object> info = new HashMap<>();
-        info.put("resourceTypes", resourceTypeMapping.keySet().stream().sorted().toList());
+        info.put("resourceTypes", resourceTypeMapping);
         info.put("totalTypes", resourceTypeMapping.size());
         info.put("usage", Map.of(
             "getAll", "GET /api/v2/mock/{resourceType}",
