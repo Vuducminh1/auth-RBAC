@@ -5,6 +5,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.Map;
 import java.util.Set;
 
 @Data
@@ -24,6 +25,11 @@ public class UserDto {
     private String employmentType;
     private boolean enabled;
     private Set<String> assignedPatients;
-    private Set<String> permissions;
+    
+    /**
+     * Permissions grouped by resource type
+     * Example: {"AdmissionRecord": "read", "ClinicalNote": "create,read"}
+     */
+    private Map<String, String> permissions;
 }
 

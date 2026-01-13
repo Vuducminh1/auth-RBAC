@@ -5,7 +5,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.util.Set;
+import java.util.Map;
 
 @Data
 @Builder
@@ -20,6 +20,11 @@ public class LoginResponse {
     private String role;
     private String department;
     private String branch;
-    private Set<String> permissions;
+    
+    /**
+     * Permissions grouped by resource type
+     * Example: {"AdmissionRecord": "read", "ClinicalNote": "create,read"}
+     */
+    private Map<String, String> permissions;
 }
 

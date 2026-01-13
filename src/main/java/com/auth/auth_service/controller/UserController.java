@@ -9,7 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @RestController
@@ -77,10 +77,32 @@ public class UserController {
                 .employmentType(user.getEmploymentType())
                 .enabled(user.isEnabled())
                 .assignedPatients(user.getAssignedPatients())
-                .permissions(user.getRole().getPermissions().stream()
-                        .map(p -> p.getPermissionKey())
-                        .collect(Collectors.toSet()))
+                .permissions(groupPermissionsByResource(user))
                 .build();
+    }
+    
+    /**
+     * Group permissions by resource type
+     * Example output: {"AdmissionRecord": "read", "ClinicalNote": "create,read"}
+     */
+    private Map<String, String> groupPermissionsByResource(User user) {
+        Set<com.auth.auth_service.entity.Permission> allPermissions = new HashSet<>(user.getRole().getPermissions());
+        allPermissions.addAll(user.getAdditionalPermissions());
+        
+        Map<String, Set<String>> resourceActionsMap = new LinkedHashMap<>();
+        
+        for (com.auth.auth_service.entity.Permission permission : allPermissions) {
+            String resourceType = permission.getResourceType();
+            String action = permission.getAction();
+            resourceActionsMap.computeIfAbsent(resourceType, k -> new TreeSet<>()).add(action);
+        }
+        
+        Map<String, String> result = new LinkedHashMap<>();
+        resourceActionsMap.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .forEach(entry -> result.put(entry.getKey(), String.join(",", entry.getValue())));
+        
+        return result;
     }
 }
 

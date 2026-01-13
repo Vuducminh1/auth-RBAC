@@ -20,7 +20,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.UUID;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -48,6 +48,12 @@ public class AuthService {
         UserPrincipal userPrincipal = (UserPrincipal) authentication.getPrincipal();
         String jwt = tokenProvider.generateToken(authentication);
         
+        // Get user for full permissions mapping
+        User user = userRepository.findByUsername(userPrincipal.getUsername())
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        
+        Map<String, String> permissionsMap = groupPermissionsByResource(user);
+        
         log.info("User {} logged in successfully", userPrincipal.getUsername());
         
         return LoginResponse.builder()
@@ -59,7 +65,7 @@ public class AuthService {
                 .role(userPrincipal.getRole())
                 .department(userPrincipal.getDepartment())
                 .branch(userPrincipal.getBranch())
-                .permissions(userPrincipal.getPermissionKeys())
+                .permissions(permissionsMap)
                 .build();
     }
     
@@ -147,6 +153,9 @@ public class AuthService {
     }
     
     private UserDto mapToUserDto(User user) {
+        // Group permissions by resourceType -> actions (comma separated)
+        Map<String, String> permissionsMap = groupPermissionsByResource(user);
+        
         return UserDto.builder()
                 .userId(user.getUserId())
                 .username(user.getUsername())
@@ -160,10 +169,36 @@ public class AuthService {
                 .employmentType(user.getEmploymentType())
                 .enabled(user.isEnabled())
                 .assignedPatients(user.getAssignedPatients())
-                .permissions(user.getRole().getPermissions().stream()
-                        .map(p -> p.getPermissionKey())
-                        .collect(Collectors.toSet()))
+                .permissions(permissionsMap)
                 .build();
+    }
+    
+    /**
+     * Group permissions by resource type
+     * Example output: {"AdmissionRecord": "read", "ClinicalNote": "create,read"}
+     */
+    private Map<String, String> groupPermissionsByResource(User user) {
+        // Collect all permissions (from role + additional permissions)
+        Set<com.auth.auth_service.entity.Permission> allPermissions = new HashSet<>(user.getRole().getPermissions());
+        allPermissions.addAll(user.getAdditionalPermissions());
+        
+        // Group by resourceType -> Set of actions
+        Map<String, Set<String>> resourceActionsMap = new LinkedHashMap<>();
+        
+        for (com.auth.auth_service.entity.Permission permission : allPermissions) {
+            String resourceType = permission.getResourceType();
+            String action = permission.getAction();
+            
+            resourceActionsMap.computeIfAbsent(resourceType, k -> new TreeSet<>()).add(action);
+        }
+        
+        // Convert to Map<String, String> with comma-separated actions
+        Map<String, String> result = new LinkedHashMap<>();
+        resourceActionsMap.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .forEach(entry -> result.put(entry.getKey(), String.join(",", entry.getValue())));
+        
+        return result;
     }
 }
 
