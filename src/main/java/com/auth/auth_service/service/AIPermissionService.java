@@ -42,7 +42,7 @@ public class AIPermissionService {
      */
     @SuppressWarnings("unchecked")
     public Map<String, Object> recommendNewUser(String role, String department, String branch, 
-                                                 String license, String seniority) {
+                                                 String license, String seniority,String position, String employmentType) {
         log.info("Requesting AI recommendation for new user: role={}, department={}, branch={}", 
                 role, department, branch);
         
@@ -51,7 +51,9 @@ public class AIPermissionService {
             "department", department,
             "branch", branch,
             "license", license,
-            "seniority", seniority
+            "seniority", seniority,
+            "position", position,
+            "employment_type", employmentType
         );
         
         try {
