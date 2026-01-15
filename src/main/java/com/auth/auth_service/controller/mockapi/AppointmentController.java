@@ -1,5 +1,6 @@
 package com.auth.auth_service.controller.mockapi;
 
+import com.auth.auth_service.aop.Audit;
 import com.auth.auth_service.dto.ApiResponse;
 import com.auth.auth_service.dto.AuthorizationRequest;
 import com.auth.auth_service.dto.AuthorizationResponse;
@@ -86,6 +87,7 @@ public class AppointmentController {
                 .build());
     }
     
+    @Audit(resourceType = "Appointment", action = "read")
     @GetMapping
     public ResponseEntity<ApiResponse<List<AppointmentDto>>> getAllAppointments(
             @AuthenticationPrincipal UserPrincipal user,
@@ -110,6 +112,7 @@ public class AppointmentController {
         return ResponseEntity.ok(ApiResponse.success("Appointments retrieved", appointments));
     }
     
+    @Audit(resourceType = "Appointment", action = "read")
     @GetMapping("/{appointmentId}")
     public ResponseEntity<ApiResponse<AppointmentDto>> getAppointment(
             @PathVariable String appointmentId,
@@ -131,6 +134,7 @@ public class AppointmentController {
         return ResponseEntity.ok(ApiResponse.success(appointment));
     }
     
+    @Audit(resourceType = "Appointment", action = "create")
     @PostMapping
     public ResponseEntity<ApiResponse<AppointmentDto>> createAppointment(
             @RequestBody(required = false) AppointmentDto request,
@@ -184,6 +188,7 @@ public class AppointmentController {
                 .body(ApiResponse.success("Appointment created", request));
     }
     
+    @Audit(resourceType = "Appointment", action = "update")
     @PutMapping("/{appointmentId}")
     public ResponseEntity<ApiResponse<AppointmentDto>> updateAppointment(
             @PathVariable String appointmentId,
@@ -215,6 +220,7 @@ public class AppointmentController {
         return ResponseEntity.ok(ApiResponse.success("Appointment updated", existing));
     }
     
+    @Audit(resourceType = "Appointment", action = "update")
     @PostMapping("/{appointmentId}/check-in")
     public ResponseEntity<ApiResponse<AppointmentDto>> checkInAppointment(
             @PathVariable String appointmentId,
@@ -240,6 +246,7 @@ public class AppointmentController {
         return ResponseEntity.ok(ApiResponse.success("Patient checked in", existing));
     }
     
+    @Audit(resourceType = "Appointment", action = "update")
     @PostMapping("/{appointmentId}/cancel")
     public ResponseEntity<ApiResponse<AppointmentDto>> cancelAppointment(
             @PathVariable String appointmentId,

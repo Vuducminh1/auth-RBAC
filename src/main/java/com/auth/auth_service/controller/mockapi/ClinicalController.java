@@ -1,5 +1,6 @@
 package com.auth.auth_service.controller.mockapi;
 
+import com.auth.auth_service.aop.Audit;
 import com.auth.auth_service.dto.ApiResponse;
 import com.auth.auth_service.dto.AuthorizationRequest;
 import com.auth.auth_service.dto.AuthorizationResponse;
@@ -99,6 +100,7 @@ public class    ClinicalController {
     
     // ==================== Clinical Notes ====================
     
+    @Audit(resourceType = "ClinicalNote", action = "read")
     @GetMapping("/notes")
     public ResponseEntity<ApiResponse<List<ClinicalNoteDto>>> getAllNotes(
             @AuthenticationPrincipal UserPrincipal user,
@@ -118,6 +120,7 @@ public class    ClinicalController {
         return ResponseEntity.ok(ApiResponse.success("Clinical notes retrieved", notes));
     }
     
+    @Audit(resourceType = "ClinicalNote", action = "read")
     @GetMapping("/notes/{noteId}")
     public ResponseEntity<ApiResponse<ClinicalNoteDto>> getNote(
             @PathVariable String noteId,
@@ -139,6 +142,7 @@ public class    ClinicalController {
         return ResponseEntity.ok(ApiResponse.success(note));
     }
     
+    @Audit(resourceType = "ClinicalNote", action = "create")
     @PostMapping("/notes")
     public ResponseEntity<ApiResponse<ClinicalNoteDto>> createNote(
             @RequestBody(required = false) ClinicalNoteDto request,
@@ -182,6 +186,7 @@ public class    ClinicalController {
     
     // ==================== Vital Signs ====================
     
+    @Audit(resourceType = "VitalSigns", action = "read")
     @GetMapping("/vitals")
     public ResponseEntity<ApiResponse<List<VitalSignsDto>>> getAllVitals(
             @AuthenticationPrincipal UserPrincipal user,
@@ -201,6 +206,7 @@ public class    ClinicalController {
         return ResponseEntity.ok(ApiResponse.success("Vital signs retrieved", vitals));
     }
     
+    @Audit(resourceType = "VitalSigns", action = "read")
     @GetMapping("/vitals/{vitalId}")
     public ResponseEntity<ApiResponse<VitalSignsDto>> getVital(
             @PathVariable String vitalId,
@@ -222,6 +228,7 @@ public class    ClinicalController {
         return ResponseEntity.ok(ApiResponse.success(vital));
     }
     
+    @Audit(resourceType = "VitalSigns", action = "create")
     @PostMapping("/vitals")
     public ResponseEntity<ApiResponse<VitalSignsDto>> createVital(
             @RequestBody(required = false) VitalSignsDto request,
@@ -231,7 +238,7 @@ public class    ClinicalController {
         if (request == null) {
             request = new VitalSignsDto();
         }
-        
+
         // Set default patientId if not provided
         if (request.getPatientId() == null || request.getPatientId().isEmpty()) {
             request.setPatientId("PAT001");
@@ -266,6 +273,7 @@ public class    ClinicalController {
                 .body(ApiResponse.success("Vital signs recorded", request));
     }
     
+    @Audit(resourceType = "VitalSigns", action = "update")
     @PutMapping("/vitals/{vitalId}")
     public ResponseEntity<ApiResponse<VitalSignsDto>> updateVital(
             @PathVariable String vitalId,

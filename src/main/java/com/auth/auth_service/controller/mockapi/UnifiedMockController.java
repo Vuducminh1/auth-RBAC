@@ -1,5 +1,6 @@
 package com.auth.auth_service.controller.mockapi;
 
+import com.auth.auth_service.aop.Audit;
 import com.auth.auth_service.dto.ApiResponse;
 import com.auth.auth_service.dto.AuthorizationRequest;
 import com.auth.auth_service.dto.AuthorizationResponse;
@@ -132,6 +133,7 @@ public class UnifiedMockController {
     }
     
     // ==================== GET ALL ====================
+    @Audit
     @GetMapping("/{resourceType}")
     public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getAll(
             @PathVariable String resourceType,
@@ -165,6 +167,7 @@ public class UnifiedMockController {
     }
     
     // ==================== GET BY ID ====================
+    @Audit
     @GetMapping("/{resourceType}/{id}")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getById(
             @PathVariable String resourceType,
@@ -196,6 +199,7 @@ public class UnifiedMockController {
     }
     
     // ==================== CREATE (NO BODY REQUIRED) ====================
+    @Audit
     @PostMapping("/{resourceType}")
     public ResponseEntity<ApiResponse<Map<String, Object>>> create(
             @PathVariable String resourceType,

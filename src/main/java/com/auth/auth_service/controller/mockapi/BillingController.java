@@ -1,5 +1,6 @@
 package com.auth.auth_service.controller.mockapi;
 
+import com.auth.auth_service.aop.Audit;
 import com.auth.auth_service.dto.ApiResponse;
 import com.auth.auth_service.dto.AuthorizationRequest;
 import com.auth.auth_service.dto.AuthorizationResponse;
@@ -147,6 +148,7 @@ public class BillingController {
     
     // ==================== Billing Records ====================
     
+    @Audit(resourceType = "BillingRecord", action = "read")
     @GetMapping("/records")
     public ResponseEntity<ApiResponse<List<BillingRecordDto>>> getAllBillingRecords(
             @AuthenticationPrincipal UserPrincipal user,
@@ -168,6 +170,7 @@ public class BillingController {
         return ResponseEntity.ok(ApiResponse.success("Billing records retrieved", records));
     }
     
+    @Audit(resourceType = "BillingRecord", action = "read")
     @GetMapping("/records/{billingId}")
     public ResponseEntity<ApiResponse<BillingRecordDto>> getBillingRecord(
             @PathVariable String billingId,
@@ -188,6 +191,7 @@ public class BillingController {
         return ResponseEntity.ok(ApiResponse.success(billing));
     }
     
+    @Audit(resourceType = "BillingRecord", action = "create")
     @PostMapping("/records")
     public ResponseEntity<ApiResponse<BillingRecordDto>> createBillingRecord(
             @RequestBody(required = false) BillingRecordDto request,
@@ -252,6 +256,7 @@ public class BillingController {
                 .body(ApiResponse.success("Billing record created", request));
     }
     
+    @Audit(resourceType = "BillingRecord", action = "update")
     @PutMapping("/records/{billingId}")
     public ResponseEntity<ApiResponse<BillingRecordDto>> updateBillingRecord(
             @PathVariable String billingId,
@@ -281,6 +286,7 @@ public class BillingController {
     
     // ==================== Invoices ====================
     
+    @Audit(resourceType = "Invoice", action = "read")
     @GetMapping("/invoices")
     public ResponseEntity<ApiResponse<List<InvoiceDto>>> getAllInvoices(
             @AuthenticationPrincipal UserPrincipal user,
@@ -302,6 +308,7 @@ public class BillingController {
         return ResponseEntity.ok(ApiResponse.success("Invoices retrieved", invoices));
     }
     
+    @Audit(resourceType = "Invoice", action = "create")
     @PostMapping("/invoices")
     public ResponseEntity<ApiResponse<InvoiceDto>> createInvoice(
             @RequestBody(required = false) InvoiceDto request,
@@ -348,6 +355,7 @@ public class BillingController {
                 .body(ApiResponse.success("Invoice created", request));
     }
     
+    @Audit(resourceType = "Invoice", action = "approve")
     @PostMapping("/invoices/{invoiceId}/approve")
     public ResponseEntity<ApiResponse<InvoiceDto>> approveInvoice(
             @PathVariable String invoiceId,
@@ -384,6 +392,7 @@ public class BillingController {
     
     // ==================== Insurance Claims ====================
     
+    @Audit(resourceType = "InsuranceClaim", action = "read")
     @GetMapping("/claims")
     public ResponseEntity<ApiResponse<List<InsuranceClaimDto>>> getAllClaims(
             @AuthenticationPrincipal UserPrincipal user,
@@ -405,6 +414,7 @@ public class BillingController {
         return ResponseEntity.ok(ApiResponse.success("Claims retrieved", claims));
     }
     
+    @Audit(resourceType = "InsuranceClaim", action = "create")
     @PostMapping("/claims")
     public ResponseEntity<ApiResponse<InsuranceClaimDto>> createClaim(
             @RequestBody(required = false) InsuranceClaimDto request,
@@ -452,6 +462,7 @@ public class BillingController {
     
     // ==================== Financial Reports ====================
     
+    @Audit(resourceType = "FinancialReport", action = "read")
     @GetMapping("/reports/financial")
     public ResponseEntity<ApiResponse<List<ReportDto>>> getAllFinancialReports(
             @AuthenticationPrincipal UserPrincipal user) {
@@ -469,6 +480,7 @@ public class BillingController {
         return ResponseEntity.ok(ApiResponse.success("Financial reports retrieved", reports));
     }
     
+    @Audit(resourceType = "FinancialReport", action = "read")
     @GetMapping("/reports/financial/{reportId}")
     public ResponseEntity<ApiResponse<ReportDto>> getFinancialReport(
             @PathVariable String reportId,

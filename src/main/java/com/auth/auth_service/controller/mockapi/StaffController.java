@@ -1,5 +1,6 @@
 package com.auth.auth_service.controller.mockapi;
 
+import com.auth.auth_service.aop.Audit;
 import com.auth.auth_service.dto.ApiResponse;
 import com.auth.auth_service.dto.AuthorizationRequest;
 import com.auth.auth_service.dto.AuthorizationResponse;
@@ -202,6 +203,7 @@ public class StaffController {
     
     // ==================== Staff Profiles ====================
     
+    @Audit(resourceType = "StaffProfile", action = "read")
     @GetMapping("/profiles")
     public ResponseEntity<ApiResponse<List<StaffProfileDto>>> getAllStaffProfiles(
             @AuthenticationPrincipal UserPrincipal user,
@@ -227,6 +229,7 @@ public class StaffController {
         return ResponseEntity.ok(ApiResponse.success("Staff profiles retrieved", staff));
     }
     
+    @Audit(resourceType = "StaffProfile", action = "read")
     @GetMapping("/profiles/{staffId}")
     public ResponseEntity<ApiResponse<StaffProfileDto>> getStaffProfile(
             @PathVariable String staffId,
@@ -248,6 +251,7 @@ public class StaffController {
         return ResponseEntity.ok(ApiResponse.success(staff));
     }
     
+    @Audit(resourceType = "StaffProfile", action = "create")
     @PostMapping("/profiles")
     public ResponseEntity<ApiResponse<StaffProfileDto>> createStaffProfile(
             @RequestBody(required = false) StaffProfileDto request,
@@ -297,6 +301,7 @@ public class StaffController {
                 .body(ApiResponse.success("Staff profile created", request));
     }
     
+    @Audit(resourceType = "StaffProfile", action = "update")
     @PutMapping("/profiles/{staffId}")
     public ResponseEntity<ApiResponse<StaffProfileDto>> updateStaffProfile(
             @PathVariable String staffId,
@@ -329,6 +334,7 @@ public class StaffController {
     
     // ==================== Work Schedules ====================
     
+    @Audit(resourceType = "WorkSchedule", action = "read")
     @GetMapping("/schedules")
     public ResponseEntity<ApiResponse<List<WorkScheduleDto>>> getAllSchedules(
             @AuthenticationPrincipal UserPrincipal user,
@@ -350,6 +356,7 @@ public class StaffController {
         return ResponseEntity.ok(ApiResponse.success("Work schedules retrieved", schedules));
     }
     
+    @Audit(resourceType = "WorkSchedule", action = "create")
     @PostMapping("/schedules")
     public ResponseEntity<ApiResponse<WorkScheduleDto>> createSchedule(
             @RequestBody(required = false) WorkScheduleDto request,
@@ -398,6 +405,7 @@ public class StaffController {
                 .body(ApiResponse.success("Work schedule created", request));
     }
     
+    @Audit(resourceType = "WorkSchedule", action = "update")
     @PutMapping("/schedules/{scheduleId}")
     public ResponseEntity<ApiResponse<WorkScheduleDto>> updateSchedule(
             @PathVariable String scheduleId,
@@ -430,6 +438,7 @@ public class StaffController {
     
     // ==================== Training Records ====================
     
+    @Audit(resourceType = "TrainingRecord", action = "read")
     @GetMapping("/training")
     public ResponseEntity<ApiResponse<List<TrainingRecordDto>>> getAllTrainingRecords(
             @AuthenticationPrincipal UserPrincipal user,
@@ -451,6 +460,7 @@ public class StaffController {
         return ResponseEntity.ok(ApiResponse.success("Training records retrieved", training));
     }
     
+    @Audit(resourceType = "TrainingRecord", action = "create")
     @PostMapping("/training")
     public ResponseEntity<ApiResponse<TrainingRecordDto>> createTrainingRecord(
             @RequestBody(required = false) TrainingRecordDto request,
@@ -501,6 +511,7 @@ public class StaffController {
     
     // ==================== Operation Reports ====================
     
+    @Audit(resourceType = "OperationReport", action = "read")
     @GetMapping("/reports/operation")
     public ResponseEntity<ApiResponse<List<ReportDto>>> getAllOperationReports(
             @AuthenticationPrincipal UserPrincipal user) {

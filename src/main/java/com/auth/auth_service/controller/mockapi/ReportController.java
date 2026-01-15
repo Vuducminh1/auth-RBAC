@@ -1,5 +1,6 @@
 package com.auth.auth_service.controller.mockapi;
 
+import com.auth.auth_service.aop.Audit;
 import com.auth.auth_service.dto.ApiResponse;
 import com.auth.auth_service.dto.AuthorizationRequest;
 import com.auth.auth_service.dto.AuthorizationResponse;
@@ -103,6 +104,7 @@ public class ReportController {
                 .build());
     }
     
+    @Audit(resourceType = "MedicalReport", action = "read")
     @GetMapping("/medical")
     public ResponseEntity<ApiResponse<List<ReportDto>>> getAllMedicalReports(
             @AuthenticationPrincipal UserPrincipal user,
@@ -127,6 +129,7 @@ public class ReportController {
         return ResponseEntity.ok(ApiResponse.success("Medical reports retrieved", reports));
     }
     
+    @Audit(resourceType = "MedicalReport", action = "read")
     @GetMapping("/medical/{reportId}")
     public ResponseEntity<ApiResponse<ReportDto>> getMedicalReport(
             @PathVariable String reportId,
@@ -148,6 +151,7 @@ public class ReportController {
         return ResponseEntity.ok(ApiResponse.success(report));
     }
     
+    @Audit(resourceType = "MedicalReport", action = "read")
     @GetMapping("/summary")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getReportSummary(
             @AuthenticationPrincipal UserPrincipal user) {
@@ -190,4 +194,3 @@ public class ReportController {
         return authorizationService.authorize(request);
     }
 }
-

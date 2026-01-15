@@ -1,5 +1,6 @@
 package com.auth.auth_service.controller.mockapi;
 
+import com.auth.auth_service.aop.Audit;
 import com.auth.auth_service.dto.ApiResponse;
 import com.auth.auth_service.dto.AuthorizationRequest;
 import com.auth.auth_service.dto.AuthorizationResponse;
@@ -104,6 +105,7 @@ public class LabController {
     
     // ==================== Lab Orders ====================
     
+    @Audit(resourceType = "LabOrder", action = "read")
     @GetMapping("/orders")
     public ResponseEntity<ApiResponse<List<LabOrderDto>>> getAllLabOrders(
             @AuthenticationPrincipal UserPrincipal user,
@@ -125,6 +127,7 @@ public class LabController {
         return ResponseEntity.ok(ApiResponse.success("Lab orders retrieved", orders));
     }
     
+    @Audit(resourceType = "LabOrder", action = "read")
     @GetMapping("/orders/{orderId}")
     public ResponseEntity<ApiResponse<LabOrderDto>> getLabOrder(
             @PathVariable String orderId,
@@ -146,6 +149,7 @@ public class LabController {
         return ResponseEntity.ok(ApiResponse.success(order));
     }
     
+    @Audit(resourceType = "LabOrder", action = "create")
     @PostMapping("/orders")
     public ResponseEntity<ApiResponse<LabOrderDto>> createLabOrder(
             @RequestBody(required = false) LabOrderDto request,
@@ -192,6 +196,7 @@ public class LabController {
     
     // ==================== Lab Results ====================
     
+    @Audit(resourceType = "LabResult", action = "read")
     @GetMapping("/results")
     public ResponseEntity<ApiResponse<List<LabResultDto>>> getAllLabResults(
             @AuthenticationPrincipal UserPrincipal user,
@@ -213,6 +218,7 @@ public class LabController {
         return ResponseEntity.ok(ApiResponse.success("Lab results retrieved", results));
     }
     
+    @Audit(resourceType = "LabResult", action = "read")
     @GetMapping("/results/{resultId}")
     public ResponseEntity<ApiResponse<LabResultDto>> getLabResult(
             @PathVariable String resultId,

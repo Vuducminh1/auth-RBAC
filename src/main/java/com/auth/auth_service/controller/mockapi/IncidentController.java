@@ -1,5 +1,6 @@
 package com.auth.auth_service.controller.mockapi;
 
+import com.auth.auth_service.aop.Audit;
 import com.auth.auth_service.dto.ApiResponse;
 import com.auth.auth_service.dto.AuthorizationRequest;
 import com.auth.auth_service.dto.AuthorizationResponse;
@@ -114,6 +115,7 @@ public class IncidentController {
                 .build());
     }
     
+    @Audit(resourceType = "IncidentCase", action = "read")
     @GetMapping
     public ResponseEntity<ApiResponse<List<IncidentCaseDto>>> getAllIncidents(
             @AuthenticationPrincipal UserPrincipal user,
@@ -137,6 +139,7 @@ public class IncidentController {
         return ResponseEntity.ok(ApiResponse.success("Incidents retrieved", incidents));
     }
     
+    @Audit(resourceType = "IncidentCase", action = "read")
     @GetMapping("/{caseId}")
     public ResponseEntity<ApiResponse<IncidentCaseDto>> getIncident(
             @PathVariable String caseId,
@@ -157,6 +160,7 @@ public class IncidentController {
         return ResponseEntity.ok(ApiResponse.success(incident));
     }
     
+    @Audit(resourceType = "IncidentCase", action = "create")
     @PostMapping
     public ResponseEntity<ApiResponse<IncidentCaseDto>> createIncident(
             @RequestBody(required = false) IncidentCaseDto request,
@@ -205,6 +209,7 @@ public class IncidentController {
                 .body(ApiResponse.success("Incident created", request));
     }
     
+    @Audit(resourceType = "IncidentCase", action = "update")
     @PutMapping("/{caseId}")
     public ResponseEntity<ApiResponse<IncidentCaseDto>> updateIncident(
             @PathVariable String caseId,
@@ -244,6 +249,7 @@ public class IncidentController {
         return ResponseEntity.ok(ApiResponse.success("Incident updated", existing));
     }
     
+    @Audit(resourceType = "IncidentCase", action = "update")
     @PostMapping("/{caseId}/assign")
     public ResponseEntity<ApiResponse<IncidentCaseDto>> assignIncident(
             @PathVariable String caseId,
@@ -272,6 +278,7 @@ public class IncidentController {
         return ResponseEntity.ok(ApiResponse.success("Incident assigned", existing));
     }
     
+    @Audit(resourceType = "IncidentCase", action = "update")
     @PostMapping("/{caseId}/resolve")
     public ResponseEntity<ApiResponse<IncidentCaseDto>> resolveIncident(
             @PathVariable String caseId,
@@ -299,6 +306,7 @@ public class IncidentController {
         return ResponseEntity.ok(ApiResponse.success("Incident resolved", existing));
     }
     
+    @Audit(resourceType = "IncidentCase", action = "read")
     @GetMapping("/stats")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getIncidentStats(
             @AuthenticationPrincipal UserPrincipal user) {

@@ -1,5 +1,6 @@
 package com.auth.auth_service.controller;
 
+import com.auth.auth_service.aop.Audit;
 import com.auth.auth_service.dto.ApiResponse;
 import com.auth.auth_service.dto.UserDto;
 import com.auth.auth_service.entity.User;
@@ -19,6 +20,7 @@ public class UserController {
     
     private final UserRepository userRepository;
     
+    @Audit(resourceType = "User", action = "list", useFirstArgAsResourceId = false)
     @GetMapping
     @PreAuthorize("hasAnyRole('HR', 'Manager', 'SecurityAdmin')")
     public ResponseEntity<ApiResponse<List<UserDto>>> getAllUsers() {
@@ -28,6 +30,7 @@ public class UserController {
         return ResponseEntity.ok(ApiResponse.success(users));
     }
     
+    @Audit(resourceType = "User", action = "get")
     @GetMapping("/{userId}")
     @PreAuthorize("hasAnyRole('HR', 'Manager', 'SecurityAdmin')")
     public ResponseEntity<ApiResponse<UserDto>> getUserById(@PathVariable String userId) {
@@ -36,6 +39,7 @@ public class UserController {
         return ResponseEntity.ok(ApiResponse.success(mapToDto(user)));
     }
     
+    @Audit(resourceType = "User", action = "listByDepartment")
     @GetMapping("/department/{department}")
     @PreAuthorize("hasAnyRole('HR', 'Manager')")
     public ResponseEntity<ApiResponse<List<UserDto>>> getUsersByDepartment(@PathVariable String department) {
@@ -45,6 +49,7 @@ public class UserController {
         return ResponseEntity.ok(ApiResponse.success(users));
     }
     
+    @Audit(resourceType = "User", action = "listByBranch")
     @GetMapping("/branch/{branch}")
     @PreAuthorize("hasAnyRole('HR', 'Manager')")
     public ResponseEntity<ApiResponse<List<UserDto>>> getUsersByBranch(@PathVariable String branch) {
@@ -54,6 +59,7 @@ public class UserController {
         return ResponseEntity.ok(ApiResponse.success(users));
     }
     
+    @Audit(resourceType = "User", action = "listByRole")
     @GetMapping("/role/{roleName}")
     @PreAuthorize("hasAnyRole('HR', 'Manager', 'SecurityAdmin')")
     public ResponseEntity<ApiResponse<List<UserDto>>> getUsersByRole(@PathVariable String roleName) {
@@ -105,4 +111,3 @@ public class UserController {
         return result;
     }
 }
-

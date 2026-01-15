@@ -1,5 +1,6 @@
 package com.auth.auth_service.controller;
 
+import com.auth.auth_service.aop.Audit;
 import com.auth.auth_service.dto.ApiResponse;
 import com.auth.auth_service.dto.LoginRequest;
 import com.auth.auth_service.dto.LoginResponse;
@@ -21,6 +22,7 @@ public class AuthController {
     
     private final AuthService authService;
     
+    @Audit(resourceType = "Auth", action = "login", useFirstArgAsResourceId = false)
     @PostMapping("/login")
     public ResponseEntity<ApiResponse<LoginResponse>> login(@Valid @RequestBody LoginRequest loginRequest) {
         log.info("Login attempt for user: {}", loginRequest.getUsername());
@@ -92,4 +94,3 @@ public class AuthController {
         return ResponseEntity.ok(ApiResponse.success("Available roles", roles));
     }
 }
-

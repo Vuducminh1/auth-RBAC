@@ -1,5 +1,6 @@
 package com.auth.auth_service.controller.mockapi;
 
+import com.auth.auth_service.aop.Audit;
 import com.auth.auth_service.dto.ApiResponse;
 import com.auth.auth_service.dto.AuthorizationRequest;
 import com.auth.auth_service.dto.AuthorizationResponse;
@@ -122,6 +123,7 @@ public class ImagingController {
     
     // ==================== Imaging Orders ====================
     
+    @Audit(resourceType = "ImagingOrder", action = "read")
     @GetMapping("/orders")
     public ResponseEntity<ApiResponse<List<ImagingOrderDto>>> getAllImagingOrders(
             @AuthenticationPrincipal UserPrincipal user,
@@ -145,6 +147,7 @@ public class ImagingController {
         return ResponseEntity.ok(ApiResponse.success("Imaging orders retrieved", orders));
     }
     
+    @Audit(resourceType = "ImagingOrder", action = "read")
     @GetMapping("/orders/{orderId}")
     public ResponseEntity<ApiResponse<ImagingOrderDto>> getImagingOrder(
             @PathVariable String orderId,
@@ -166,6 +169,7 @@ public class ImagingController {
         return ResponseEntity.ok(ApiResponse.success(order));
     }
     
+    @Audit(resourceType = "ImagingOrder", action = "create")
     @PostMapping("/orders")
     public ResponseEntity<ApiResponse<ImagingOrderDto>> createImagingOrder(
             @RequestBody(required = false) ImagingOrderDto request,
@@ -211,6 +215,7 @@ public class ImagingController {
     
     // ==================== Imaging Results ====================
     
+    @Audit(resourceType = "ImagingResult", action = "read")
     @GetMapping("/results")
     public ResponseEntity<ApiResponse<List<ImagingResultDto>>> getAllImagingResults(
             @AuthenticationPrincipal UserPrincipal user,
@@ -232,6 +237,7 @@ public class ImagingController {
         return ResponseEntity.ok(ApiResponse.success("Imaging results retrieved", results));
     }
     
+    @Audit(resourceType = "ImagingResult", action = "read")
     @GetMapping("/results/{resultId}")
     public ResponseEntity<ApiResponse<ImagingResultDto>> getImagingResult(
             @PathVariable String resultId,

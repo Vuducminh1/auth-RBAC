@@ -1,5 +1,6 @@
 package com.auth.auth_service.controller;
 
+import com.auth.auth_service.aop.Audit;
 import com.auth.auth_service.dto.ApiResponse;
 import com.auth.auth_service.dto.AuthorizationRequest;
 import com.auth.auth_service.dto.AuthorizationResponse;
@@ -21,6 +22,7 @@ public class AuthorizationController {
     /**
      * Check if current user is authorized to perform an action on a resource
      */
+    @Audit(resourceType = "AuthorizationRequest", action = "check", useFirstArgAsResourceId = false)
     @PostMapping("/check")
     public ResponseEntity<ApiResponse<AuthorizationResponse>> checkAuthorization(
             @Valid @RequestBody AuthorizationRequest request) {
@@ -52,4 +54,3 @@ public class AuthorizationController {
         return ResponseEntity.ok(ApiResponse.success(responses));
     }
 }
-

@@ -1,5 +1,6 @@
 package com.auth.auth_service.controller.mockapi;
 
+import com.auth.auth_service.aop.Audit;
 import com.auth.auth_service.dto.ApiResponse;
 import com.auth.auth_service.dto.AuthorizationRequest;
 import com.auth.auth_service.dto.AuthorizationResponse;
@@ -81,6 +82,7 @@ public class MedicalRecordController {
                 .build());
     }
     
+    @Audit(resourceType = "MedicalRecord", action = "read")
     @GetMapping
     public ResponseEntity<ApiResponse<List<MedicalRecordDto>>> getAllRecords(
             @AuthenticationPrincipal UserPrincipal user,
@@ -100,6 +102,7 @@ public class MedicalRecordController {
         return ResponseEntity.ok(ApiResponse.success("Medical records retrieved", records));
     }
     
+    @Audit(resourceType = "MedicalRecord", action = "read")
     @GetMapping("/{recordId}")
     public ResponseEntity<ApiResponse<MedicalRecordDto>> getRecord(
             @PathVariable String recordId,
@@ -121,6 +124,7 @@ public class MedicalRecordController {
         return ResponseEntity.ok(ApiResponse.success(record));
     }
     
+    @Audit(resourceType = "MedicalRecord", action = "create")
     @PostMapping
     public ResponseEntity<ApiResponse<MedicalRecordDto>> createRecord(
             @RequestBody(required = false) MedicalRecordDto request,
@@ -165,6 +169,7 @@ public class MedicalRecordController {
                 .body(ApiResponse.success("Medical record created", request));
     }
     
+    @Audit(resourceType = "MedicalRecord", action = "update")
     @PutMapping("/{recordId}")
     public ResponseEntity<ApiResponse<MedicalRecordDto>> updateRecord(
             @PathVariable String recordId,
@@ -194,6 +199,7 @@ public class MedicalRecordController {
         return ResponseEntity.ok(ApiResponse.success("Medical record updated", existing));
     }
     
+    @Audit(resourceType = "MedicalRecord", action = "export")
     @PostMapping("/{recordId}/export")
     public ResponseEntity<ApiResponse<Map<String, Object>>> exportRecord(
             @PathVariable String recordId,
@@ -206,13 +212,13 @@ public class MedicalRecordController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(ApiResponse.error("Medical record not found"));
         }
-        
+
         // Build environment context for export action
         Map<String, Object> environment = new HashMap<>();
         environment.put("emergency_mode", emergencyMode);
         environment.put("export_approved", approvalTicketId != null && !approvalTicketId.isEmpty());
         environment.put("approval_ticket_id", approvalTicketId);
-        
+
         AuthorizationRequest authRequest = AuthorizationRequest.builder()
                 .resourceType("MedicalRecord")
                 .action("export")
@@ -223,13 +229,13 @@ public class MedicalRecordController {
                 .resourceSensitivity(existing.getSensitivity())
                 .environment(environment)
                 .build();
-        
+
         AuthorizationResponse authResponse = authorizationService.authorize(authRequest);
         if (!authResponse.isAllowed()) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
                     .body(ApiResponse.error("Export denied: " + String.join(", ", authResponse.getDenyReasons())));
         }
-        
+
         // Mock export response
         Map<String, Object> exportData = new HashMap<>();
         exportData.put("recordId", existing.getRecordId());
@@ -237,12 +243,12 @@ public class MedicalRecordController {
         exportData.put("exportedBy", user.getUserId());
         exportData.put("format", "PDF");
         exportData.put("downloadUrl", "/api/mock/exports/" + recordId + ".pdf");
-        
+
         log.info("Medical record exported by {}: {} (emergency={})", user.getUserId(), recordId, emergencyMode);
         return ResponseEntity.ok(ApiResponse.success("Export initiated", exportData));
     }
-    
-    private AuthorizationResponse checkAuthorization(UserPrincipal user, String resourceType, 
+
+    private AuthorizationResponse checkAuthorization(UserPrincipal user, String resourceType,
                                                      String action, String resourceBranch,
                                                      String resourceDepartment, String patientId) {
         AuthorizationRequest request = AuthorizationRequest.builder()
@@ -252,7 +258,7 @@ public class MedicalRecordController {
                 .resourceDepartment(resourceDepartment)
                 .patientId(patientId)
                 .build();
-        
+
         return authorizationService.authorize(request);
     }
     

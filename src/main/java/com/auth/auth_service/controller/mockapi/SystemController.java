@@ -1,5 +1,6 @@
 package com.auth.auth_service.controller.mockapi;
 
+import com.auth.auth_service.aop.Audit;
 import com.auth.auth_service.dto.ApiResponse;
 import com.auth.auth_service.dto.AuthorizationRequest;
 import com.auth.auth_service.dto.AuthorizationResponse;
@@ -188,6 +189,7 @@ public class SystemController {
     
     // ==================== System Configuration ====================
     
+    @Audit(resourceType = "SystemConfig", action = "read")
     @GetMapping("/config")
     public ResponseEntity<ApiResponse<List<SystemConfigDto>>> getAllConfigs(
             @AuthenticationPrincipal UserPrincipal user,
@@ -206,6 +208,7 @@ public class SystemController {
         return ResponseEntity.ok(ApiResponse.success("System configurations retrieved", configs));
     }
     
+    @Audit(resourceType = "SystemConfig", action = "read")
     @GetMapping("/config/{configId}")
     public ResponseEntity<ApiResponse<SystemConfigDto>> getConfig(
             @PathVariable String configId,
@@ -226,6 +229,7 @@ public class SystemController {
         return ResponseEntity.ok(ApiResponse.success(config));
     }
     
+    @Audit(resourceType = "SystemConfig", action = "update")
     @PutMapping("/config/{configId}")
     public ResponseEntity<ApiResponse<SystemConfigDto>> updateConfig(
             @PathVariable String configId,
@@ -255,6 +259,7 @@ public class SystemController {
     
     // ==================== Access Policies ====================
     
+    @Audit(resourceType = "AccessPolicy", action = "read")
     @GetMapping("/policies")
     public ResponseEntity<ApiResponse<List<AccessPolicyDto>>> getAllPolicies(
             @AuthenticationPrincipal UserPrincipal user,
@@ -275,6 +280,7 @@ public class SystemController {
         return ResponseEntity.ok(ApiResponse.success("Access policies retrieved", policies));
     }
     
+    @Audit(resourceType = "AccessPolicy", action = "read")
     @GetMapping("/policies/{policyId}")
     public ResponseEntity<ApiResponse<AccessPolicyDto>> getPolicy(
             @PathVariable String policyId,
@@ -295,6 +301,7 @@ public class SystemController {
         return ResponseEntity.ok(ApiResponse.success(policy));
     }
     
+    @Audit(resourceType = "AccessPolicy", action = "update")
     @PutMapping("/policies/{policyId}")
     public ResponseEntity<ApiResponse<AccessPolicyDto>> updatePolicy(
             @PathVariable String policyId,
@@ -326,6 +333,7 @@ public class SystemController {
     
     // ==================== Audit Logs ====================
     
+    @Audit(resourceType = "AuditLog", action = "read")
     @GetMapping("/audit-logs")
     public ResponseEntity<ApiResponse<List<AuditLog>>> getAuditLogs(
             @AuthenticationPrincipal UserPrincipal user,
@@ -359,6 +367,7 @@ public class SystemController {
         return ResponseEntity.ok(ApiResponse.success("Audit logs retrieved", logs));
     }
     
+    @Audit(resourceType = "AuditLog", action = "read")
     @GetMapping("/audit-logs/stats")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getAuditStats(
             @AuthenticationPrincipal UserPrincipal user) {

@@ -1,5 +1,6 @@
 package com.auth.auth_service.controller.mockapi;
 
+import com.auth.auth_service.aop.Audit;
 import com.auth.auth_service.dto.ApiResponse;
 import com.auth.auth_service.dto.AuthorizationRequest;
 import com.auth.auth_service.dto.AuthorizationResponse;
@@ -97,6 +98,7 @@ public class PrescriptionController {
                 .build());
     }
     
+    @Audit(resourceType = "Prescription", action = "read")
     @GetMapping
     public ResponseEntity<ApiResponse<List<PrescriptionDto>>> getAllPrescriptions(
             @AuthenticationPrincipal UserPrincipal user,
@@ -118,6 +120,7 @@ public class PrescriptionController {
         return ResponseEntity.ok(ApiResponse.success("Prescriptions retrieved", prescriptions));
     }
     
+    @Audit(resourceType = "Prescription", action = "read")
     @GetMapping("/{prescriptionId}")
     public ResponseEntity<ApiResponse<PrescriptionDto>> getPrescription(
             @PathVariable String prescriptionId,
@@ -139,6 +142,7 @@ public class PrescriptionController {
         return ResponseEntity.ok(ApiResponse.success(prescription));
     }
     
+    @Audit(resourceType = "Prescription", action = "create")
     @PostMapping
     public ResponseEntity<ApiResponse<PrescriptionDto>> createPrescription(
             @RequestBody(required = false) PrescriptionDto request,
@@ -191,6 +195,7 @@ public class PrescriptionController {
                 .body(ApiResponse.success("Prescription created", request));
     }
     
+    @Audit(resourceType = "Prescription", action = "update")
     @PutMapping("/{prescriptionId}")
     public ResponseEntity<ApiResponse<PrescriptionDto>> updatePrescription(
             @PathVariable String prescriptionId,
@@ -223,6 +228,7 @@ public class PrescriptionController {
         return ResponseEntity.ok(ApiResponse.success("Prescription updated", existing));
     }
     
+    @Audit(resourceType = "Prescription", action = "approve")
     @PostMapping("/{prescriptionId}/approve")
     public ResponseEntity<ApiResponse<PrescriptionDto>> approvePrescription(
             @PathVariable String prescriptionId,

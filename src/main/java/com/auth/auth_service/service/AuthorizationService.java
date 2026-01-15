@@ -152,7 +152,7 @@ public class AuthorizationService {
                 : "DENY_" + (denyReasons.isEmpty() ? "UNAUTHORIZED" : String.join("_", denyReasons));
         
         // Log the authorization decision
-        logAuthorizationDecision(user, request, allowed, policyId, denyReasons, riskScore);
+//        logAuthorizationDecision(user, request, allowed, policyId, denyReasons, riskScore);
         
         return AuthorizationResponse.builder()
                 .allowed(allowed)

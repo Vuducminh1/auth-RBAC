@@ -1,5 +1,6 @@
 package com.auth.auth_service.controller.mockapi;
 
+import com.auth.auth_service.aop.Audit;
 import com.auth.auth_service.dto.ApiResponse;
 import com.auth.auth_service.dto.AuthorizationRequest;
 import com.auth.auth_service.dto.AuthorizationResponse;
@@ -119,6 +120,7 @@ public class AdmissionController {
     
     // ==================== Admission Records ====================
     
+    @Audit(resourceType = "AdmissionRecord", action = "read")
     @GetMapping
     public ResponseEntity<ApiResponse<List<AdmissionRecordDto>>> getAllAdmissions(
             @AuthenticationPrincipal UserPrincipal user,
@@ -140,6 +142,7 @@ public class AdmissionController {
         return ResponseEntity.ok(ApiResponse.success("Admissions retrieved", admissions));
     }
     
+    @Audit(resourceType = "AdmissionRecord", action = "read")
     @GetMapping("/{admissionId}")
     public ResponseEntity<ApiResponse<AdmissionRecordDto>> getAdmission(
             @PathVariable String admissionId,
@@ -161,6 +164,7 @@ public class AdmissionController {
         return ResponseEntity.ok(ApiResponse.success(admission));
     }
     
+    @Audit(resourceType = "AdmissionRecord", action = "create")
     @PostMapping
     public ResponseEntity<ApiResponse<AdmissionRecordDto>> createAdmission(
             @RequestBody(required = false) AdmissionRecordDto request,
@@ -211,6 +215,7 @@ public class AdmissionController {
     
     // ==================== Transfer Records ====================
     
+    @Audit(resourceType = "TransferRecord", action = "read")
     @GetMapping("/transfers")
     public ResponseEntity<ApiResponse<List<TransferRecordDto>>> getAllTransfers(
             @AuthenticationPrincipal UserPrincipal user,
@@ -230,6 +235,7 @@ public class AdmissionController {
         return ResponseEntity.ok(ApiResponse.success("Transfers retrieved", transfers));
     }
     
+    @Audit(resourceType = "TransferRecord", action = "create")
     @PostMapping("/transfers")
     public ResponseEntity<ApiResponse<TransferRecordDto>> createTransfer(
             @RequestBody(required = false) TransferRecordDto request,
@@ -279,6 +285,7 @@ public class AdmissionController {
     
     // ==================== Discharge Summaries ====================
     
+    @Audit(resourceType = "DischargeSummary", action = "read")
     @GetMapping("/discharge-summaries")
     public ResponseEntity<ApiResponse<List<DischargeSummaryDto>>> getAllDischargeSummaries(
             @AuthenticationPrincipal UserPrincipal user,
@@ -300,6 +307,7 @@ public class AdmissionController {
         return ResponseEntity.ok(ApiResponse.success("Discharge summaries retrieved", summaries));
     }
     
+    @Audit(resourceType = "DischargeSummary", action = "read")
     @GetMapping("/discharge-summaries/{summaryId}")
     public ResponseEntity<ApiResponse<DischargeSummaryDto>> getDischargeSummary(
             @PathVariable String summaryId,
@@ -321,6 +329,7 @@ public class AdmissionController {
         return ResponseEntity.ok(ApiResponse.success(summary));
     }
     
+    @Audit(resourceType = "DischargeSummary", action = "create")
     @PostMapping("/discharge-summaries")
     public ResponseEntity<ApiResponse<DischargeSummaryDto>> createDischargeSummary(
             @RequestBody(required = false) DischargeSummaryDto request,

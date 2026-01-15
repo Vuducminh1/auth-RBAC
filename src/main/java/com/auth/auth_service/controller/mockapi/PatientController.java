@@ -1,5 +1,6 @@
 package com.auth.auth_service.controller.mockapi;
 
+import com.auth.auth_service.aop.Audit;
 import com.auth.auth_service.dto.ApiResponse;
 import com.auth.auth_service.dto.AuthorizationRequest;
 import com.auth.auth_service.dto.AuthorizationResponse;
@@ -88,6 +89,7 @@ public class PatientController {
                 .build());
     }
     
+    @Audit(resourceType = "PatientProfile", action = "read")
     @GetMapping
     public ResponseEntity<ApiResponse<List<PatientProfileDto>>> getAllPatients(
             @AuthenticationPrincipal UserPrincipal user) {
@@ -108,6 +110,7 @@ public class PatientController {
         return ResponseEntity.ok(ApiResponse.success("Patients retrieved successfully", patients));
     }
     
+    @Audit(resourceType = "PatientProfile", action = "read")
     @GetMapping("/{patientId}")
     public ResponseEntity<ApiResponse<PatientProfileDto>> getPatient(
             @PathVariable String patientId,
@@ -128,6 +131,7 @@ public class PatientController {
         return ResponseEntity.ok(ApiResponse.success(applyMasking(patient, authResponse)));
     }
     
+    @Audit(resourceType = "PatientProfile", action = "create")
     @PostMapping
     public ResponseEntity<ApiResponse<PatientProfileDto>> createPatient(
             @RequestBody(required = false) PatientProfileDto request,
@@ -168,6 +172,7 @@ public class PatientController {
                 .body(ApiResponse.success("Patient created successfully", request));
     }
     
+    @Audit(resourceType = "PatientProfile", action = "update")
     @PutMapping("/{patientId}")
     public ResponseEntity<ApiResponse<PatientProfileDto>> updatePatient(
             @PathVariable String patientId,
@@ -219,8 +224,8 @@ public class PatientController {
         mockPatients.remove(patientId);
         return ResponseEntity.ok(ApiResponse.success("Patient deleted successfully", null));
     }
-    
-    private AuthorizationResponse checkAuthorization(UserPrincipal user, String resourceType, 
+
+    private AuthorizationResponse checkAuthorization(UserPrincipal user, String resourceType,
                                                      String action, String resourceBranch) {
         AuthorizationRequest request = AuthorizationRequest.builder()
                 .resourceType(resourceType)
