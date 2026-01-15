@@ -4,8 +4,11 @@ import com.auth.auth_service.dto.LoginRequest;
 import com.auth.auth_service.dto.LoginResponse;
 import com.auth.auth_service.dto.RegisterRequest;
 import com.auth.auth_service.dto.UserDto;
+import com.auth.auth_service.entity.PendingPermissionRequest;
 import com.auth.auth_service.entity.Role;
 import com.auth.auth_service.entity.User;
+import com.auth.auth_service.repository.PendingPermissionRequestRepository;
+import com.auth.auth_service.repository.PermissionRepository;
 import com.auth.auth_service.repository.RoleRepository;
 import com.auth.auth_service.repository.UserRepository;
 import com.auth.auth_service.security.JwtTokenProvider;
@@ -20,8 +23,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.*;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -33,6 +36,9 @@ public class AuthService {
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
+    private final AIPermissionService aiPermissionService;
+    private final PermissionRepository permissionRepository;
+    private final PendingPermissionRequestRepository pendingRepo;
     
     @Transactional(readOnly = true)
     public LoginResponse login(LoginRequest loginRequest) {
@@ -101,6 +107,10 @@ public class AuthService {
         String userId = generateUserId(registerRequest.getRole());
         
         // Tạo user mới
+        String position = registerRequest.getPosition() != null ? registerRequest.getPosition() : "Staff";
+        String seniority = registerRequest.getSeniority() != null ? registerRequest.getSeniority() : "Junior";
+        String employmentType = registerRequest.getEmploymentType() != null ? registerRequest.getEmploymentType() : "FullTime";
+        
         User user = User.builder()
                 .userId(userId)
                 .username(registerRequest.getUsername())
@@ -108,10 +118,10 @@ public class AuthService {
                 .email(registerRequest.getEmail())
                 .department(registerRequest.getDepartment())
                 .branch(registerRequest.getBranch())
-                .position(registerRequest.getPosition() != null ? registerRequest.getPosition() : "Staff")
+                .position(position)
                 .hasLicense(registerRequest.isHasLicense())
-                .seniority(registerRequest.getSeniority() != null ? registerRequest.getSeniority() : "Junior")
-                .employmentType(registerRequest.getEmploymentType() != null ? registerRequest.getEmploymentType() : "FullTime")
+                .seniority(seniority)
+                .employmentType(employmentType)
                 .role(role)
                 .enabled(true)
                 .accountNonExpired(true)
@@ -121,9 +131,92 @@ public class AuthService {
         
         User savedUser = userRepository.save(user);
         
+        // Gọi AI để gợi ý quyền bổ sung
+        try {
+            Map<String, Object> aiRecommendation = aiPermissionService.recommendNewUser(
+                registerRequest.getRole(),
+                registerRequest.getDepartment(),
+                registerRequest.getBranch(),
+                registerRequest.isHasLicense() ? "Yes" : "No",
+                seniority,
+                position,
+                employmentType
+            );
+            
+            if (aiRecommendation != null && !aiRecommendation.containsKey("error")) {
+                int pendingCount = saveAIRecommendationsAsPending(savedUser, aiRecommendation);
+                log.info("User registered with {} AI-recommended permissions pending approval", pendingCount);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to get AI recommendations for user {}: {}", savedUser.getUsername(), e.getMessage());
+            // Không throw exception - user vẫn được tạo thành công
+        }
+        
         log.info("User registered successfully: {} with role {}", savedUser.getUsername(), role.getName());
         
         return mapToUserDto(savedUser);
+    }
+    
+    /**
+     * Lưu các gợi ý từ AI vào bảng pending_permission_requests
+     */
+    @SuppressWarnings("unchecked")
+    private int saveAIRecommendationsAsPending(User user, Map<String, Object> aiRecommendation) {
+        Object recommendationsObj = aiRecommendation.get("recommendations");
+        if (recommendationsObj == null || !(recommendationsObj instanceof List)) {
+            return 0;
+        }
+        
+        List<Map<String, Object>> recommendations = (List<Map<String, Object>>) recommendationsObj;
+        int count = 0;
+        
+        for (Map<String, Object> rec : recommendations) {
+            String permissionLabel = (String) rec.get("permission"); // e.g., "MedicalRecord_read"
+            Object confidenceObj = rec.get("confidence");
+            double confidence = confidenceObj instanceof Number ? ((Number) confidenceObj).doubleValue() : 0.6;
+            
+            // Parse permission label: "ResourceType_action"
+            String[] parts = permissionLabel.split("_");
+            if (parts.length >= 2) {
+                String resourceType = parts[0];
+                String action = parts[1];
+                
+                // Tìm permission trong database
+                permissionRepository.findFirstByResourceTypeAndAction(resourceType, action)
+                    .ifPresent(permission -> {
+                        // Kiểm tra user chưa có quyền này từ role
+                        boolean alreadyHasFromRole = user.getRole().getPermissions().stream()
+                            .anyMatch(p -> p.getId().equals(permission.getId()));
+                        
+                        // Nếu đã có quyền từ role thì không cần thêm
+                        if (alreadyHasFromRole) {
+                            return;
+                        }
+                        
+                        // Kiểm tra chưa có pending request
+                        boolean alreadyPending = pendingRepo.existsByUserIdAndPermissionIdAndStatus(
+                            user.getId(), permission.getId(), "PENDING");
+                        
+                        if (!alreadyPending) {
+                            PendingPermissionRequest pending = PendingPermissionRequest.builder()
+                                .user(user)
+                                .permission(permission)
+                                .confidence(BigDecimal.valueOf(confidence))
+                                .requestType("NEW_USER")
+                                .changeType("ADD")
+                                .status("PENDING")
+                                .build();
+                            
+                            pendingRepo.save(pending);
+                            log.debug("Created pending permission request: {} -> {} (confidence: {})",
+                                user.getUsername(), permissionLabel, confidence);
+                        }
+                    });
+                count++;
+            }
+        }
+        
+        return count;
     }
     
     private String generateUserId(String roleName) {

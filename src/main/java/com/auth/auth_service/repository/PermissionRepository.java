@@ -14,5 +14,10 @@ public interface PermissionRepository extends JpaRepository<Permission, Long> {
     List<Permission> findByResourceType(String resourceType);
     List<Permission> findByAction(String action);
     boolean existsByPermissionKey(String permissionKey);
+    
+    /**
+     * Tìm permission theo resourceType và action (không quan tâm scope)
+     */
+    Optional<Permission> findFirstByResourceTypeAndAction(String resourceType, String action);
 }
 
