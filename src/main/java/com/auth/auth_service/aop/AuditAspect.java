@@ -84,7 +84,6 @@ public class AuditAspect {
         boolean allowed = true;
         String policyId = null;
         String denyReasons = null;
-        Integer riskScore = null;
         int statusCode = 200;
         LocalDateTime now = LocalDateTime.now();
         Object resultObj = null;
@@ -153,7 +152,7 @@ public class AuditAspect {
                     .allowed(allowed)
                     .policyId(policyId)
                     .denyReasons(denyReasons)
-                    .riskScore(riskScore)
+                    .riskScore(calculateRiskScore(req))
                     .timestamp(now)
                     .ipAddress(ip)
                     .userAgent(userAgent)
@@ -178,5 +177,37 @@ public class AuditAspect {
         } else {
             return "DENY_HTTP_" + statusCode;
         }
+    }
+
+    private int calculateRiskScore(HttpServletRequest request) {
+        int score = 0;
+
+        // Off-hours access (before 8 AM or after 6 PM)
+        int hour = LocalDateTime.now().getHour();
+        if (hour < 8 || hour > 18) {
+            score += 2;
+        }
+
+        // High-risk HTTP methods
+        String method = request.getMethod();
+        if ("DELETE".equals(method)) {
+            score += 3;
+        } else if ("PUT".equals(method) || "PATCH".equals(method)) {
+            score += 1;
+        }
+
+        // High-risk endpoints
+        String uri = request.getRequestURI();
+        if (uri.contains("export")) {
+            score += 3;
+        }
+        if (uri.contains("/system/") || uri.contains("/policies/")) {
+            score += 2;
+        }
+        if (uri.contains("/ai/recommend/anomaly")) {
+            score += 1; // Sensitive security operation
+        }
+
+        return score;
     }
 }
